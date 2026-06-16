@@ -1,6 +1,6 @@
 # solar-dinosaur
 
-A React + Vite website with three side-by-side Three.js scenes (solar, crystal, and dinosaur) in a triptych layout.
+A React + Vite website with three side-by-side Three.js scenes (solar, co2, and saving) in a triptych layout.
 
 This guide assumes you are starting on a machine with **no development tools installed** yet.
 
@@ -211,20 +211,133 @@ npm install
 
 ---
 
-## Project structure (brief)
+## File organization
+
+The project is a standard Vite + React app. Here is what each important file and folder does:
 
 ```text
 solar-dinosaur/
-├── index.html          # HTML entry point
-├── package.json        # Dependencies and scripts
-├── src/
-│   ├── App.jsx         # Main layout (nav, triptych, footer)
-│   ├── components/
-│   │   └── ThreePanel.jsx   # Three.js canvas wrapper
-│   └── scenes/
-│       └── index.js    # Solar, crystal, and dinosaur scenes
-└── public/             # Static assets
+├── index.html              # Single HTML page; loads the React app via src/main.jsx
+├── package.json            # Project name, dependencies, and npm scripts
+├── package-lock.json       # Locked dependency versions (created by npm install)
+├── vite.config.js          # Vite build/dev server configuration
+├── eslint.config.js        # Linting rules
+│
+├── public/                 # Static files served as-is (not processed by React)
+│   └── icons.svg           # SVG icons used elsewhere in the template
+│
+└── src/                    # Application source code
+    ├── main.jsx            # React entry point; mounts <App /> into index.html
+    ├── index.css           # Global styles (colors, typography, #root layout)
+    ├── App.jsx             # Page structure: header, triptych panels, footer
+    ├── App.css             # Layout styles for nav, triptych, panels, footer
+    │
+    ├── components/
+    │   └── ThreePanel.jsx  # React wrapper that mounts and runs a Three.js scene
+    │
+    ├── scenes/
+    │   └── index.js        # All Three.js scene definitions (see below)
+    │
+    └── assets/             # Images and SVGs imported by React components
+        ├── hero.png
+        ├── react.svg
+        └── vite.svg
 ```
+
+### How the pieces connect
+
+1. **`index.html`** loads **`src/main.jsx`**, which renders **`App.jsx`**.
+2. **`App.jsx`** lays out the page and renders three **`ThreePanel`** components side by side.
+3. Each **`ThreePanel`** receives a `variant` prop (`"solar"`, `"co2"`, or `"saving"`).
+4. **`ThreePanel`** looks up that variant in **`src/scenes/index.js`**, creates the scene, and runs the animation loop.
+5. **`App.css`** and **`index.css`** control page layout and colors; they do **not** contain Three.js object logic.
+
+---
+
+## Three.js scenes: where they live and how to edit them
+
+### Where the scene code is
+
+All Three.js scene logic lives in **`src/scenes/index.js`**.
+
+That file defines three scene factory functions:
+
+| Function | `variant` in App.jsx | Panel | What it shows |
+|----------|----------------------|-------|----------------|
+| `createSolarScene()` | `"solar"` | Left | Rotating sun with corona and orbit ring |
+| `createCo2Scene()` | `"co2"` | Center | Purple torus knot with ring |
+| `createSavingScene()` | `"saving"` | Right | Low-poly figure on a ground disc |
+
+They are registered at the bottom of the file in `sceneFactories`, which maps variant names to functions:
+
+```js
+export const sceneFactories = {
+  solar: createSolarScene,
+  co2: createCo2Scene,
+  saving: createSavingScene,
+}
+```
+
+**`src/components/ThreePanel.jsx`** should rarely need changes. It handles the canvas, resizing, render loop, and cleanup. Edit this file only if you need to change how scenes are mounted (not what they contain).
+
+**`src/App.jsx`** wires each panel to a scene via the `variant` prop:
+
+```jsx
+<ThreePanel variant="solar" label="Solar scene" />
+<ThreePanel variant="co2" label="CO2 scene" />
+<ThreePanel variant="saving" label="Saving scene" />
+```
+
+### How to edit an existing scene
+
+1. Start the dev server: `npm run dev`
+2. Open **`src/scenes/index.js`** in your editor
+3. Find the function for the panel you want to change (e.g. `createSolarScene`)
+4. Edit meshes, materials, lights, camera position, or animation
+5. Save the file — Vite hot-reloads and the browser updates automatically
+
+Each scene function follows the same pattern:
+
+```js
+export function createSolarScene() {
+  const scene = new THREE.Scene()
+  const camera = createCamera()
+  const renderer = createRenderer()
+
+  // Add lights, meshes, groups to scene...
+
+  const animate = () => {
+    // Update rotations, positions, etc. each frame
+  }
+
+  return { scene, camera, renderer, animate, objects: [/* meshes to dispose */] }
+}
+```
+
+Common edits:
+
+- **Colors:** change `color`, `emissive`, or `opacity` in `MeshStandardMaterial` / `MeshBasicMaterial`
+- **Shapes:** swap `IcosahedronGeometry`, `TorusKnotGeometry`, `BoxGeometry`, etc.
+- **Motion:** edit the `animate` function (rotation speed, bobbing, etc.)
+- **Camera:** adjust `camera.position.set(x, y, z)` inside the scene function
+- **Lighting:** modify `addLights()` or add more lights in a specific scene
+
+Any new mesh or group you add to a scene should also be listed in the `objects` array in the return value so **`ThreePanel`** can dispose of it cleanly when the component unmounts.
+
+### How to add a new scene
+
+1. Add a new factory function in **`src/scenes/index.js`** (copy an existing one as a template)
+2. Register it in `sceneFactories` with a new key, e.g. `moon: createMoonScene`
+3. In **`src/App.jsx`**, add a new triptych panel and `<ThreePanel variant="moon" label="Moon scene" />`
+4. Update nav links and styles in **`App.jsx`** / **`App.css`** if needed
+
+### Three.js reference
+
+Scene code uses the [Three.js API](https://threejs.org/docs/). Useful docs:
+
+- [Geometries](https://threejs.org/docs/#api/en/geometries/BoxGeometry)
+- [Materials](https://threejs.org/docs/#api/en/materials/MeshStandardMaterial)
+- [Lights](https://threejs.org/docs/#api/en/lights/DirectionalLight)
 
 ---
 

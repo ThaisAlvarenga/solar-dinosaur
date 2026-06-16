@@ -69,7 +69,7 @@ export function createSolarScene() {
   return { scene, camera, renderer, animate, objects: [sun, corona, orbit] }
 }
 
-export function createCrystalScene() {
+export function createCo2Scene() {
   const scene = new THREE.Scene()
   const camera = createCamera()
   camera.position.set(0, 0.2, 4.5)
@@ -77,7 +77,7 @@ export function createCrystalScene() {
 
   addLights(scene, 0xf0e8ff)
 
-  const knot = new THREE.Mesh(
+  const co2Knot = new THREE.Mesh(
     new THREE.TorusKnotGeometry(0.75, 0.22, 128, 16),
     new THREE.MeshStandardMaterial({
       color: 0xaa3bff,
@@ -87,9 +87,9 @@ export function createCrystalScene() {
       metalness: 0.45,
     }),
   )
-  scene.add(knot)
+  scene.add(co2Knot)
 
-  const ring = new THREE.Mesh(
+  const co2Ring = new THREE.Mesh(
     new THREE.TorusGeometry(1.55, 0.025, 12, 96),
     new THREE.MeshStandardMaterial({
       color: 0xc084fc,
@@ -99,20 +99,20 @@ export function createCrystalScene() {
       roughness: 0.2,
     }),
   )
-  ring.rotation.x = Math.PI / 2
-  scene.add(ring)
+  co2Ring.rotation.x = Math.PI / 2
+  scene.add(co2Ring)
 
   const animate = () => {
-    knot.rotation.x += 0.007
-    knot.rotation.y += 0.01
-    ring.rotation.z -= 0.005
+    co2Knot.rotation.x += 0.007
+    co2Knot.rotation.y += 0.01
+    co2Ring.rotation.z -= 0.005
   }
 
-  return { scene, camera, renderer, animate, objects: [knot, ring] }
+  return { scene, camera, renderer, animate, objects: [co2Knot, co2Ring] }
 }
 
-function createDinosaur() {
-  const dino = new THREE.Group()
+function createSaving() {
+  const saving = new THREE.Group()
   const material = new THREE.MeshStandardMaterial({
     color: 0x4ade80,
     roughness: 0.55,
@@ -125,25 +125,25 @@ function createDinosaur() {
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.7, 0.8), material)
   body.position.y = 0.2
-  dino.add(body)
+  saving.add(body)
 
   const neck = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.55, 0.35), material)
   neck.position.set(0.75, 0.55, 0)
   neck.rotation.z = -0.45
-  dino.add(neck)
+  saving.add(neck)
 
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.4, 0.45), material)
   head.position.set(1.05, 0.85, 0)
-  dino.add(head)
+  saving.add(head)
 
   const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 12), accent)
   eye.position.set(1.28, 0.92, 0.14)
-  dino.add(eye)
+  saving.add(eye)
 
   const tail = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.25, 0.3), material)
   tail.position.set(-1.05, 0.35, 0)
   tail.rotation.z = 0.25
-  dino.add(tail)
+  saving.add(tail)
 
   const legGeometry = new THREE.BoxGeometry(0.22, 0.55, 0.22)
   ;[
@@ -154,18 +154,18 @@ function createDinosaur() {
   ].forEach(([x, y, z]) => {
     const leg = new THREE.Mesh(legGeometry, accent)
     leg.position.set(x, y, z)
-    dino.add(leg)
+    saving.add(leg)
   })
 
   const spine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.55), accent)
   spine.position.set(0, 0.62, 0)
-  dino.add(spine)
+  saving.add(spine)
 
-  dino.scale.setScalar(0.95)
-  return dino
+  saving.scale.setScalar(0.95)
+  return saving
 }
 
-export function createDinosaurScene() {
+export function createSavingScene() {
   const scene = new THREE.Scene()
   const camera = createCamera()
   camera.position.set(0, 0.4, 5.5)
@@ -184,19 +184,19 @@ export function createDinosaurScene() {
   ground.position.y = -0.55
   scene.add(ground)
 
-  const dino = createDinosaur()
-  scene.add(dino)
+  const saving = createSaving()
+  scene.add(saving)
 
   const animate = () => {
-    dino.rotation.y += 0.008
-    dino.position.y = Math.sin(Date.now() * 0.002) * 0.04
+    saving.rotation.y += 0.008
+    saving.position.y = Math.sin(Date.now() * 0.002) * 0.04
   }
 
-  return { scene, camera, renderer, animate, objects: [ground, dino] }
+  return { scene, camera, renderer, animate, objects: [ground, saving] }
 }
 
 export const sceneFactories = {
   solar: createSolarScene,
-  crystal: createCrystalScene,
-  dinosaur: createDinosaurScene,
+  co2: createCo2Scene,
+  saving: createSavingScene,
 }

@@ -14,10 +14,10 @@ function App() {
               <a href="#center">Solar</a>
             </li>
             <li>
-              <a href="#docs">Crystal</a>
+              <a href="#co2">CO2</a>
             </li>
             <li>
-              <a href="#social">Dinosaur</a>
+              <a href="#saving">Saving</a>
             </li>
           </ul>
         </nav>
@@ -31,12 +31,12 @@ function App() {
             <ThreePanel variant="solar" label="Solar scene" />
           </div>
 
-          <div id="docs" className="triptych-panel">
-            <ThreePanel variant="crystal" label="Crystal scene" />
+          <div id="co2" className="triptych-panel">
+            <ThreePanel variant="co2" label="CO2 scene" />
           </div>
 
-          <div id="social" className="triptych-panel">
-            <ThreePanel variant="dinosaur" label="Dinosaur scene" />
+          <div id="saving" className="triptych-panel">
+            <ThreePanel variant="saving" label="Saving scene" />
           </div>
         </section>
       </main>
