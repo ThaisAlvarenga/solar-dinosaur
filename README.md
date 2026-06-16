@@ -233,3 +233,13 @@ solar-dinosaur/
 - [React](https://react.dev/)
 - [Vite](https://vite.dev/)
 - [Three.js](https://threejs.org/)
+
+
+## Notes on Collaboration
+
+For collaborating, we are using Github. Please do the following whenever you plan to commit push something to the repository. 
+
+1. Fetch/pull from the origin of the repo. 
+2. Compare differences and accept mergers. 
+3. Do your commit and add a message for documentation
+4. Push to the origin
