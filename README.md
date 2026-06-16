@@ -355,4 +355,4 @@ For collaborating, we are using Github. Please do the following whenever you pla
 1. Fetch/pull from the origin of the repo. 
 2. Compare differences and accept mergers. 
 3. Do your commit and add a message for documentation
-4. Push to the origin
+4. Push to the Github
