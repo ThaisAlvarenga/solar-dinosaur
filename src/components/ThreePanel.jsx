@@ -1,6 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { sceneFactories } from '../scenes'
 
+/**
+ * Mounts a Three.js scene from src/scenes/index.js.
+ *
+ * Timeline wiring: when `year` is provided, this component calls the scene's
+ * `applyYear(year)` on mount and whenever the user selects a new year on the
+ * timeline. Implement year-driven visuals in each scene's applyYear() function.
+ */
 function disposeObject(object) {
   object.traverse((child) => {
     if (child.geometry) {
@@ -25,7 +32,8 @@ export default function ThreePanel({ variant, label, year }) {
     const createScene = sceneFactories[variant]
     if (!container || !createScene) return
 
-    const { scene, camera, renderer, animate, applyYear, objects } = createScene(year)
+    const { scene, camera, renderer, animate, applyYear, objects } =
+      variant === 'future' ? createScene() : createScene(year)
     applyYearRef.current = applyYear
     renderer.domElement.setAttribute('aria-label', label)
     container.appendChild(renderer.domElement)
@@ -62,8 +70,11 @@ export default function ThreePanel({ variant, label, year }) {
     }
   }, [variant, label])
 
+  // Timeline → scene: forwards the selected year to applyYear() in scenes/index.js
   useEffect(() => {
-    applyYearRef.current?.(year)
+    if (year !== undefined) {
+      applyYearRef.current?.(year)
+    }
   }, [year])
 
   return (

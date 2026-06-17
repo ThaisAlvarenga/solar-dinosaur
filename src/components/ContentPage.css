@@ -1,0 +1,49 @@
+.content-page {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.content-page-inner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 32px;
+  box-sizing: border-box;
+}
+
+.content-page-title {
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: -0.5px;
+  margin: 0 0 24px;
+  color: var(--text-h);
+}
+
+.content-page-text {
+  font-size: 18px;
+  line-height: 1.55;
+  margin: 0 0 16px;
+  color: var(--text);
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 1024px) {
+  .content-page-inner {
+    padding: 32px 20px;
+  }
+
+  .content-page-title {
+    font-size: 26px;
+  }
+
+  .content-page-text {
+    font-size: 16px;
+  }
+}

@@ -1,6 +1,25 @@
 import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 
+/**
+ * Three.js scene factories for solar-dinosaur.
+ *
+ * HOW THE TIMELINE CONNECTS TO SCENES
+ * ---------------------------------
+ * - App.jsx holds the selected `year` and passes it to each triptych ThreePanel.
+ * - ThreePanel (src/components/ThreePanel.jsx) calls `applyYear(year)` whenever
+ *   that prop changes — you do not wire the timeline inside this file.
+ * - `yearProgress(year)` returns 0 at 2021 and 1 at 2026 (see constants/timeline.js).
+ *
+ * WHERE TO WORK IN EACH SCENE FACTORY
+ * ---------------------------------
+ * 1. DATA VISUALIZATION — build meshes, materials, groups, and lights (static setup).
+ * 2. TIMELINE (applyYear) — map the selected year / progress to visual changes.
+ * 3. ANIMATION (animate) — per-frame motion; read state.year if motion should follow the year.
+ *
+ * Register new scenes in `sceneFactories` at the bottom of this file.
+ */
+
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -32,6 +51,10 @@ export function createEnergyScene(initialYear) {
 
   addLights(scene, 0xfff4e0)
 
+  // ── DATA VISUALIZATION (energy / left triptych panel) ──────────────────────
+  // Build the energy scene here: geometries, materials, groups, helpers, etc.
+  // Wired in App.jsx as: <ThreePanel variant="energy" year={year} />
+
   const energyCoreMaterial = new THREE.MeshStandardMaterial({
     color: 0xffb347,
     emissive: 0xff6600,
@@ -62,6 +85,9 @@ export function createEnergyScene(initialYear) {
   energyOrbit.rotation.x = Math.PI / 2.5
   scene.add(energyOrbit)
 
+  // ── TIMELINE (energy) ──────────────────────────────────────────────────────
+  // Called when the user clicks a year. `progress` is 0 (2021) → 1 (2026).
+  // Update materials, scales, positions, visibility, or data-driven values here.
   const applyYear = (year) => {
     state.year = year
     const progress = yearProgress(year)
@@ -84,6 +110,8 @@ export function createEnergyScene(initialYear) {
     energyOrbitMaterial.emissiveIntensity = 0.15 + progress * 0.35
   }
 
+  // ── ANIMATION (energy) ─────────────────────────────────────────────────────
+  // Per-frame updates. Use state.year / yearProgress(state.year) for year-linked motion.
   const animate = () => {
     const speed = 1 + yearProgress(state.year) * 0.75
 
@@ -114,6 +142,10 @@ export function createCo2Scene(initialYear) {
 
   addLights(scene, 0xf0e8ff)
 
+  // ── DATA VISUALIZATION (CO2 / center triptych panel) ───────────────────────
+  // Build the CO2 scene here: geometries, materials, groups, helpers, etc.
+  // Wired in App.jsx as: <ThreePanel variant="co2" year={year} />
+
   const co2KnotMaterial = new THREE.MeshStandardMaterial({
     color: 0xaa3bff,
     emissive: 0x5b1f99,
@@ -143,6 +175,9 @@ export function createCo2Scene(initialYear) {
   co2Ring.rotation.x = Math.PI / 2
   scene.add(co2Ring)
 
+  // ── TIMELINE (CO2) ─────────────────────────────────────────────────────────
+  // Called when the user clicks a year. `progress` is 0 (2021) → 1 (2026).
+  // Update materials, scales, positions, visibility, or data-driven values here.
   const applyYear = (year) => {
     state.year = year
     const progress = yearProgress(year)
@@ -159,6 +194,8 @@ export function createCo2Scene(initialYear) {
     co2RingMaterial.color.copy(lerpColor(0xc084fc, 0xff7a59, progress))
   }
 
+  // ── ANIMATION (CO2) ────────────────────────────────────────────────────────
+  // Per-frame updates. Use state.year / yearProgress(state.year) for year-linked motion.
   const animate = () => {
     const speed = 1 + yearProgress(state.year) * 1.1
 
@@ -234,6 +271,11 @@ export function createSavingScene(initialYear) {
 
   addLights(scene, 0xe8fff0)
 
+  // ── DATA VISUALIZATION (saving / right triptych panel) ───────────────────────
+  // Build the saving scene here: geometries, materials, groups, helpers, etc.
+  // Wired in App.jsx as: <ThreePanel variant="saving" year={year} />
+  // createSaving() below is a helper for the figure mesh — extend or replace as needed.
+
   const groundMaterial = new THREE.MeshStandardMaterial({
     color: 0x1f2937,
     roughness: 0.9,
@@ -247,6 +289,9 @@ export function createSavingScene(initialYear) {
   const { saving, material, accent } = createSaving()
   scene.add(saving)
 
+  // ── TIMELINE (saving) ──────────────────────────────────────────────────────
+  // Called when the user clicks a year. `progress` is 0 (2021) → 1 (2026).
+  // Update materials, scales, positions, visibility, or data-driven values here.
   const applyYear = (year) => {
     state.year = year
     const progress = yearProgress(year)
@@ -259,6 +304,8 @@ export function createSavingScene(initialYear) {
     groundMaterial.color.copy(lerpColor(0x1f2937, 0x2f5a40, progress))
   }
 
+  // ── ANIMATION (saving) ─────────────────────────────────────────────────────
+  // Per-frame updates. Use state.year / yearProgress(state.year) for year-linked motion.
   const animate = () => {
     const bob = 0.03 + yearProgress(state.year) * 0.02
 
@@ -271,8 +318,104 @@ export function createSavingScene(initialYear) {
   return { scene, camera, renderer, animate, applyYear, objects: [ground, saving] }
 }
 
+export function createFutureScene() {
+  const scene = new THREE.Scene()
+  const camera = createCamera()
+  camera.position.set(0, 0.3, 6)
+  const renderer = createRenderer()
+
+  addLights(scene, 0xe8f4ff)
+
+  // ── DATA VISUALIZATION (future / full-width Look Ahead view) ─────────────────
+  // Build the future scene here. This panel does NOT receive a timeline year.
+  // Wired in App.jsx as: <ThreePanel variant="future" /> (no year prop).
+  // applyYear below is a no-op — add timeline logic only if you change that wiring.
+
+  const horizonMaterial = new THREE.MeshStandardMaterial({
+    color: 0x7dd3fc,
+    emissive: 0x0ea5e9,
+    emissiveIntensity: 0.45,
+    roughness: 0.2,
+    metalness: 0.55,
+    transparent: true,
+    opacity: 0.85,
+  })
+
+  const futureCore = new THREE.Mesh(new THREE.IcosahedronGeometry(1.15, 2), horizonMaterial)
+  scene.add(futureCore)
+
+  const futureWire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.45, 1),
+    new THREE.MeshBasicMaterial({
+      color: 0xc084fc,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.35,
+    }),
+  )
+  scene.add(futureWire)
+
+  const orbitGroup = new THREE.Group()
+  const orbitMeshes = []
+  for (let i = 0; i < 8; i++) {
+    const node = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0x67e8f9,
+        emissiveIntensity: 0.8,
+      }),
+    )
+    const angle = (i / 8) * Math.PI * 2
+    node.position.set(Math.cos(angle) * 2.1, Math.sin(angle) * 0.35, Math.sin(angle) * 2.1)
+    orbitGroup.add(node)
+    orbitMeshes.push(node)
+  }
+  scene.add(orbitGroup)
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(2.15, 0.02, 8, 96),
+    new THREE.MeshStandardMaterial({
+      color: 0xa78bfa,
+      emissive: 0x7c3aed,
+      emissiveIntensity: 0.35,
+      metalness: 0.7,
+      roughness: 0.15,
+    }),
+  )
+  ring.rotation.x = Math.PI / 2.2
+  scene.add(ring)
+
+  // ── TIMELINE (future) ────────────────────────────────────────────────────────
+  // Intentionally empty — Future scene is not driven by the 2021–2026 timeline.
+  const applyYear = () => {}
+
+  // ── ANIMATION (future) ───────────────────────────────────────────────────────
+  const animate = () => {
+    const t = Date.now() * 0.001
+
+    futureCore.rotation.y += 0.006
+    futureCore.rotation.x = Math.sin(t * 0.5) * 0.12
+    futureWire.rotation.y -= 0.004
+    futureWire.rotation.z += 0.003
+    orbitGroup.rotation.y += 0.009
+    ring.rotation.z -= 0.005
+  }
+
+  return {
+    scene,
+    camera,
+    renderer,
+    animate,
+    applyYear,
+    objects: [futureCore, futureWire, orbitGroup, ring, ...orbitMeshes],
+  }
+}
+
+// Scene registry — keys must match the `variant` prop passed to ThreePanel in App.jsx.
 export const sceneFactories = {
   energy: createEnergyScene,
   co2: createCo2Scene,
   saving: createSavingScene,
+  future: createFutureScene,
 }
