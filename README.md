@@ -1,6 +1,6 @@
 # solar-dinosaur
 
-A React + Vite website with three side-by-side Three.js scenes (solar, co2, and saving) in a triptych layout.
+A React + Vite website with three side-by-side Three.js scenes (energy, co2, and saving) in a triptych layout.
 
 This guide assumes you are starting on a machine with **no development tools installed** yet.
 
@@ -229,11 +229,16 @@ solar-dinosaur/
 └── src/                    # Application source code
     ├── main.jsx            # React entry point; mounts <App /> into index.html
     ├── index.css           # Global styles (colors, typography, #root layout)
-    ├── App.jsx             # Page structure: header, triptych panels, footer
+    ├── App.jsx             # Page structure: header, triptych panels, timeline, footer
     ├── App.css             # Layout styles for nav, triptych, panels, footer
     │
+    ├── constants/
+    │   └── timeline.js     # Timeline year range, default year, yearProgress()
+    │
     ├── components/
-    │   └── ThreePanel.jsx  # React wrapper that mounts and runs a Three.js scene
+    │   ├── ThreePanel.jsx  # React wrapper that mounts and runs a Three.js scene
+    │   ├── Timeline.jsx    # Clickable 2021–2026 timeline
+    │   └── Timeline.css    # Timeline styles
     │
     ├── scenes/
     │   └── index.js        # All Three.js scene definitions (see below)
@@ -247,10 +252,74 @@ solar-dinosaur/
 ### How the pieces connect
 
 1. **`index.html`** loads **`src/main.jsx`**, which renders **`App.jsx`**.
-2. **`App.jsx`** lays out the page and renders three **`ThreePanel`** components side by side.
-3. Each **`ThreePanel`** receives a `variant` prop (`"solar"`, `"co2"`, or `"saving"`).
-4. **`ThreePanel`** looks up that variant in **`src/scenes/index.js`**, creates the scene, and runs the animation loop.
-5. **`App.css`** and **`index.css`** control page layout and colors; they do **not** contain Three.js object logic.
+2. **`App.jsx`** holds the selected **year** in React state and lays out the page: header, three **`ThreePanel`** components, **`Timeline`**, and footer.
+3. Each **`ThreePanel`** receives a `variant` prop (`"energy"`, `"co2"`, or `"saving"`) and the current `year`.
+4. **`ThreePanel`** looks up the variant in **`src/scenes/index.js`**, creates the scene, and runs the animation loop. When `year` changes, it calls each scene’s `applyYear()` function.
+5. **`Timeline`** displays years 2021–2026. Clicking a year updates state in **`App.jsx`**, which re-renders all three scenes.
+6. **`App.css`**, **`Timeline.css`**, and **`index.css`** control page layout and colors; they do **not** contain Three.js object logic.
+
+---
+
+## Timeline
+
+The site includes a full-width timeline between the main triptych and the footer. Clicking a year updates **all three** Three.js scenes at once.
+
+### Default year
+
+The site starts on **2021**. The default is set in **`src/constants/timeline.js`**:
+
+```js
+export const DEFAULT_YEAR = 2021
+```
+
+### Where the timeline code lives
+
+| File | Purpose |
+|------|---------|
+| **`src/components/Timeline.jsx`** | Renders the timeline UI and handles year clicks |
+| **`src/components/Timeline.css`** | Timeline layout and active-state styles |
+| **`src/constants/timeline.js`** | Year list (`2021`–`2026`), default year, and `yearProgress()` helper |
+
+**`src/App.jsx`** owns the selected year and connects the timeline to the scenes:
+
+```jsx
+const [year, setYear] = useState(DEFAULT_YEAR)
+
+<ThreePanel variant="energy" label="Energy scene" year={year} />
+<Timeline year={year} onYearChange={setYear} />
+```
+
+### How the timeline affects the scenes
+
+Each scene factory in **`src/scenes/index.js`** returns an `applyYear(year)` function alongside `animate`, `scene`, and `renderer`. When you click a year:
+
+1. **`Timeline`** calls `onYearChange(year)`
+2. **`App.jsx`** updates `year` state
+3. Each **`ThreePanel`** calls `applyYear(year)` on its scene (without remounting the canvas)
+
+`yearProgress(year)` maps the selected year to a value from `0` (2021) to `1` (2026). Scenes use that value to interpolate sizes, colors, and animation speed.
+
+| Scene | What changes from 2021 → 2026 |
+|-------|-------------------------------|
+| **Energy** | Core grows brighter and larger; corona and orbit expand; rotation speeds up |
+| **CO2** | Knot grows and shifts from purple to red; ring expands; rotation speeds up |
+| **Saving** | Figure grows and becomes greener; ground lightens; bobbing increases slightly |
+
+### How to edit the timeline
+
+**Change the year range** — edit `TIMELINE_YEARS` in **`src/constants/timeline.js`**:
+
+```js
+export const TIMELINE_YEARS = [2021, 2022, 2023, 2024, 2025, 2026]
+```
+
+If you change the range, update each scene’s `applyYear()` logic in **`src/scenes/index.js`** so the visual changes still match your years.
+
+**Change the default starting year** — edit `DEFAULT_YEAR` in the same constants file.
+
+**Change timeline appearance** — edit **`src/components/Timeline.css`** (track, markers, active state, progress bar).
+
+**Change what happens when a year is selected** — edit the `applyYear()` function inside each scene in **`src/scenes/index.js`**.
 
 ---
 
@@ -264,7 +333,7 @@ That file defines three scene factory functions:
 
 | Function | `variant` in App.jsx | Panel | What it shows |
 |----------|----------------------|-------|----------------|
-| `createSolarScene()` | `"solar"` | Left | Rotating sun with corona and orbit ring |
+| `createEnergyScene()` | `"energy"` | Left | Rotating energy core with corona and orbit ring |
 | `createCo2Scene()` | `"co2"` | Center | Purple torus knot with ring |
 | `createSavingScene()` | `"saving"` | Right | Low-poly figure on a ground disc |
 
@@ -272,45 +341,51 @@ They are registered at the bottom of the file in `sceneFactories`, which maps va
 
 ```js
 export const sceneFactories = {
-  solar: createSolarScene,
+  energy: createEnergyScene,
   co2: createCo2Scene,
   saving: createSavingScene,
 }
 ```
 
-**`src/components/ThreePanel.jsx`** should rarely need changes. It handles the canvas, resizing, render loop, and cleanup. Edit this file only if you need to change how scenes are mounted (not what they contain).
+**`src/components/ThreePanel.jsx`** handles the canvas, resizing, render loop, cleanup, and calling `applyYear()` when the year changes. Edit this file only if you need to change how scenes are mounted (not what they contain).
 
-**`src/App.jsx`** wires each panel to a scene via the `variant` prop:
+**`src/App.jsx`** wires each panel to a scene via the `variant` and `year` props:
 
 ```jsx
-<ThreePanel variant="solar" label="Solar scene" />
-<ThreePanel variant="co2" label="CO2 scene" />
-<ThreePanel variant="saving" label="Saving scene" />
+<ThreePanel variant="energy" label="Energy scene" year={year} />
+<ThreePanel variant="co2" label="CO2 scene" year={year} />
+<ThreePanel variant="saving" label="Saving scene" year={year} />
 ```
 
 ### How to edit an existing scene
 
 1. Start the dev server: `npm run dev`
 2. Open **`src/scenes/index.js`** in your editor
-3. Find the function for the panel you want to change (e.g. `createSolarScene`)
+3. Find the function for the panel you want to change (e.g. `createEnergyScene`)
 4. Edit meshes, materials, lights, camera position, or animation
 5. Save the file — Vite hot-reloads and the browser updates automatically
 
 Each scene function follows the same pattern:
 
 ```js
-export function createSolarScene() {
+export function createEnergyScene(initialYear) {
   const scene = new THREE.Scene()
   const camera = createCamera()
   const renderer = createRenderer()
 
   // Add lights, meshes, groups to scene...
 
+  const applyYear = (year) => {
+    // Update scene based on selected timeline year
+  }
+
   const animate = () => {
     // Update rotations, positions, etc. each frame
   }
 
-  return { scene, camera, renderer, animate, objects: [/* meshes to dispose */] }
+  applyYear(initialYear)
+
+  return { scene, camera, renderer, animate, applyYear, objects: [/* meshes to dispose */] }
 }
 ```
 
@@ -321,6 +396,7 @@ Common edits:
 - **Motion:** edit the `animate` function (rotation speed, bobbing, etc.)
 - **Camera:** adjust `camera.position.set(x, y, z)` inside the scene function
 - **Lighting:** modify `addLights()` or add more lights in a specific scene
+- **Timeline behavior:** edit `applyYear()` in each scene, or constants in **`src/constants/timeline.js`** (see [Timeline](#timeline) above)
 
 Any new mesh or group you add to a scene should also be listed in the `objects` array in the return value so **`ThreePanel`** can dispose of it cleanly when the component unmounts.
 
@@ -355,4 +431,4 @@ For collaborating, we are using Github. Please do the following whenever you pla
 1. Fetch/pull from the origin of the repo. 
 2. Compare differences and accept mergers. 
 3. Do your commit and add a message for documentation
-4. Push to the Github
+4. Push to the origin

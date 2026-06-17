@@ -16,15 +16,17 @@ function disposeObject(object) {
   })
 }
 
-export default function ThreePanel({ variant, label }) {
+export default function ThreePanel({ variant, label, year }) {
   const containerRef = useRef(null)
+  const applyYearRef = useRef(null)
 
   useEffect(() => {
     const container = containerRef.current
     const createScene = sceneFactories[variant]
     if (!container || !createScene) return
 
-    const { scene, camera, renderer, animate, objects } = createScene()
+    const { scene, camera, renderer, animate, applyYear, objects } = createScene(year)
+    applyYearRef.current = applyYear
     renderer.domElement.setAttribute('aria-label', label)
     container.appendChild(renderer.domElement)
 
@@ -56,8 +58,13 @@ export default function ThreePanel({ variant, label }) {
       container.removeChild(renderer.domElement)
       objects.forEach(disposeObject)
       renderer.dispose()
+      applyYearRef.current = null
     }
   }, [variant, label])
+
+  useEffect(() => {
+    applyYearRef.current?.(year)
+  }, [year])
 
   return (
     <div className="three-panel" ref={containerRef} role="img" aria-label={label} />

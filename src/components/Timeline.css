@@ -1,0 +1,124 @@
+.timeline {
+  flex-shrink: 0;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  padding: 20px 32px 24px;
+  box-sizing: border-box;
+}
+
+.timeline-track {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+}
+
+.timeline-line {
+  position: absolute;
+  top: 11px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+}
+
+.timeline-progress {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 1px;
+  transition: width 0.35s ease;
+}
+
+.timeline-years {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.timeline-year {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--heading);
+  font-size: 14px;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: var(--text-h);
+
+    .timeline-marker {
+      border-color: var(--accent-border);
+      transform: scale(1.1);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 4px;
+  }
+
+  &.is-active {
+    color: var(--text-h);
+
+    .timeline-marker {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-bg);
+    }
+
+    .timeline-label {
+      font-weight: 500;
+    }
+  }
+}
+
+.timeline-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  box-sizing: border-box;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.timeline-label {
+  line-height: 1;
+  letter-spacing: -0.2px;
+}
+
+@media (max-width: 1024px) {
+  .timeline {
+    padding: 16px 20px 20px;
+  }
+
+  .timeline-year {
+    font-size: 12px;
+    gap: 8px;
+  }
+
+  .timeline-marker {
+    width: 10px;
+    height: 10px;
+  }
+
+  .timeline-line {
+    top: 9px;
+  }
+}

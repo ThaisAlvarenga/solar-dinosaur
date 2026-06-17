@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { yearProgress } from '../constants/timeline'
 
 function createRenderer() {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -19,96 +20,156 @@ function addLights(scene, color = 0xffffff) {
   scene.add(key)
 }
 
-export function createSolarScene() {
+function lerpColor(colorA, colorB, alpha) {
+  return new THREE.Color(colorA).lerp(new THREE.Color(colorB), alpha)
+}
+
+export function createEnergyScene(initialYear) {
   const scene = new THREE.Scene()
   const camera = createCamera()
   const renderer = createRenderer()
+  const state = { year: initialYear }
 
   addLights(scene, 0xfff4e0)
 
-  const sun = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1.1, 1),
-    new THREE.MeshStandardMaterial({
-      color: 0xffb347,
-      emissive: 0xff6600,
-      emissiveIntensity: 0.55,
-      roughness: 0.35,
-      metalness: 0.1,
-    }),
-  )
-  scene.add(sun)
+  const energyCoreMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffb347,
+    emissive: 0xff6600,
+    emissiveIntensity: 0.55,
+    roughness: 0.35,
+    metalness: 0.1,
+  })
 
-  const corona = new THREE.Mesh(
-    new THREE.SphereGeometry(1.45, 32, 32),
-    new THREE.MeshBasicMaterial({
-      color: 0xffaa33,
-      transparent: true,
-      opacity: 0.12,
-    }),
-  )
-  scene.add(corona)
+  const energyCore = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 1), energyCoreMaterial)
+  scene.add(energyCore)
 
-  const orbit = new THREE.Mesh(
-    new THREE.TorusGeometry(1.8, 0.03, 8, 64),
-    new THREE.MeshStandardMaterial({
-      color: 0xffd27f,
-      emissive: 0xff9900,
-      emissiveIntensity: 0.25,
-    }),
-  )
-  orbit.rotation.x = Math.PI / 2.5
-  scene.add(orbit)
+  const energyCoronaMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffaa33,
+    transparent: true,
+    opacity: 0.12,
+  })
 
-  const animate = () => {
-    sun.rotation.y += 0.008
-    sun.rotation.x += 0.004
-    corona.rotation.y -= 0.003
-    orbit.rotation.z += 0.006
+  const energyCorona = new THREE.Mesh(new THREE.SphereGeometry(1.45, 32, 32), energyCoronaMaterial)
+  scene.add(energyCorona)
+
+  const energyOrbitMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffd27f,
+    emissive: 0xff9900,
+    emissiveIntensity: 0.25,
+  })
+
+  const energyOrbit = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.03, 8, 64), energyOrbitMaterial)
+  energyOrbit.rotation.x = Math.PI / 2.5
+  scene.add(energyOrbit)
+
+  const applyYear = (year) => {
+    state.year = year
+    const progress = yearProgress(year)
+
+    const energyCoreScale = 0.82 + progress * 0.38
+    energyCore.scale.setScalar(energyCoreScale)
+    energyCoreMaterial.emissiveIntensity = 0.3 + progress * 0.55
+    energyCoreMaterial.color.lerpColors(
+      new THREE.Color(0xffa040),
+      new THREE.Color(0xffdd55),
+      progress,
+    )
+
+    energyCoronaMaterial.opacity = 0.06 + progress * 0.16
+    const energyCoronaScale = 1.35 + progress * 0.35
+    energyCorona.scale.setScalar(energyCoronaScale / 1.45)
+
+    const energyOrbitScale = 1.55 + progress * 0.55
+    energyOrbit.scale.set(energyOrbitScale / 1.8, energyOrbitScale / 1.8, 1)
+    energyOrbitMaterial.emissiveIntensity = 0.15 + progress * 0.35
   }
 
-  return { scene, camera, renderer, animate, objects: [sun, corona, orbit] }
+  const animate = () => {
+    const speed = 1 + yearProgress(state.year) * 0.75
+
+    energyCore.rotation.y += 0.008 * speed
+    energyCore.rotation.x += 0.004 * speed
+    energyCorona.rotation.y -= 0.003 * speed
+    energyOrbit.rotation.z += 0.006 * speed
+  }
+
+  applyYear(initialYear)
+
+  return {
+    scene,
+    camera,
+    renderer,
+    animate,
+    applyYear,
+    objects: [energyCore, energyCorona, energyOrbit],
+  }
 }
 
-export function createCo2Scene() {
+export function createCo2Scene(initialYear) {
   const scene = new THREE.Scene()
   const camera = createCamera()
   camera.position.set(0, 0.2, 4.5)
   const renderer = createRenderer()
+  const state = { year: initialYear }
 
   addLights(scene, 0xf0e8ff)
 
+  const co2KnotMaterial = new THREE.MeshStandardMaterial({
+    color: 0xaa3bff,
+    emissive: 0x5b1f99,
+    emissiveIntensity: 0.35,
+    roughness: 0.25,
+    metalness: 0.45,
+  })
+
   const co2Knot = new THREE.Mesh(
     new THREE.TorusKnotGeometry(0.75, 0.22, 128, 16),
-    new THREE.MeshStandardMaterial({
-      color: 0xaa3bff,
-      emissive: 0x5b1f99,
-      emissiveIntensity: 0.35,
-      roughness: 0.25,
-      metalness: 0.45,
-    }),
+    co2KnotMaterial,
   )
   scene.add(co2Knot)
 
+  const co2RingMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc084fc,
+    emissive: 0x7c3aed,
+    emissiveIntensity: 0.2,
+    metalness: 0.6,
+    roughness: 0.2,
+  })
+
   const co2Ring = new THREE.Mesh(
     new THREE.TorusGeometry(1.55, 0.025, 12, 96),
-    new THREE.MeshStandardMaterial({
-      color: 0xc084fc,
-      emissive: 0x7c3aed,
-      emissiveIntensity: 0.2,
-      metalness: 0.6,
-      roughness: 0.2,
-    }),
+    co2RingMaterial,
   )
   co2Ring.rotation.x = Math.PI / 2
   scene.add(co2Ring)
 
-  const animate = () => {
-    co2Knot.rotation.x += 0.007
-    co2Knot.rotation.y += 0.01
-    co2Ring.rotation.z -= 0.005
+  const applyYear = (year) => {
+    state.year = year
+    const progress = yearProgress(year)
+
+    const knotScale = 0.7 + progress * 0.45
+    co2Knot.scale.setScalar(knotScale)
+
+    co2KnotMaterial.color.copy(lerpColor(0x9b6bff, 0xff4d2e, progress))
+    co2KnotMaterial.emissive.copy(lerpColor(0x4a1f99, 0x991a00, progress))
+    co2KnotMaterial.emissiveIntensity = 0.25 + progress * 0.45
+
+    const ringScale = 1.35 + progress * 0.45
+    co2Ring.scale.set(ringScale / 1.55, ringScale / 1.55, 1)
+    co2RingMaterial.color.copy(lerpColor(0xc084fc, 0xff7a59, progress))
   }
 
-  return { scene, camera, renderer, animate, objects: [co2Knot, co2Ring] }
+  const animate = () => {
+    const speed = 1 + yearProgress(state.year) * 1.1
+
+    co2Knot.rotation.x += 0.007 * speed
+    co2Knot.rotation.y += 0.01 * speed
+    co2Ring.rotation.z -= 0.005 * speed
+  }
+
+  applyYear(initialYear)
+
+  return { scene, camera, renderer, animate, applyYear, objects: [co2Knot, co2Ring] }
 }
 
 function createSaving() {
@@ -161,42 +222,57 @@ function createSaving() {
   spine.position.set(0, 0.62, 0)
   saving.add(spine)
 
-  saving.scale.setScalar(0.95)
-  return saving
+  return { saving, material, accent }
 }
 
-export function createSavingScene() {
+export function createSavingScene(initialYear) {
   const scene = new THREE.Scene()
   const camera = createCamera()
   camera.position.set(0, 0.4, 5.5)
   const renderer = createRenderer()
+  const state = { year: initialYear }
 
   addLights(scene, 0xe8fff0)
 
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(2.5, 48),
-    new THREE.MeshStandardMaterial({
-      color: 0x1f2937,
-      roughness: 0.9,
-    }),
-  )
+  const groundMaterial = new THREE.MeshStandardMaterial({
+    color: 0x1f2937,
+    roughness: 0.9,
+  })
+
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(2.5, 48), groundMaterial)
   ground.rotation.x = -Math.PI / 2
   ground.position.y = -0.55
   scene.add(ground)
 
-  const saving = createSaving()
+  const { saving, material, accent } = createSaving()
   scene.add(saving)
 
-  const animate = () => {
-    saving.rotation.y += 0.008
-    saving.position.y = Math.sin(Date.now() * 0.002) * 0.04
+  const applyYear = (year) => {
+    state.year = year
+    const progress = yearProgress(year)
+
+    const figureScale = 0.72 + progress * 0.38
+    saving.scale.setScalar(figureScale)
+
+    material.color.copy(lerpColor(0x6b9080, 0x4ade80, progress))
+    accent.color.copy(lerpColor(0x1a3d2a, 0x166534, progress))
+    groundMaterial.color.copy(lerpColor(0x1f2937, 0x2f5a40, progress))
   }
 
-  return { scene, camera, renderer, animate, objects: [ground, saving] }
+  const animate = () => {
+    const bob = 0.03 + yearProgress(state.year) * 0.02
+
+    saving.rotation.y += 0.008
+    saving.position.y = Math.sin(Date.now() * 0.002) * bob
+  }
+
+  applyYear(initialYear)
+
+  return { scene, camera, renderer, animate, applyYear, objects: [ground, saving] }
 }
 
 export const sceneFactories = {
-  solar: createSolarScene,
+  energy: createEnergyScene,
   co2: createCo2Scene,
   saving: createSavingScene,
 }
