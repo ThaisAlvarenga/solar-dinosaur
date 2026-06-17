@@ -1,13 +1,17 @@
 import { useEffect, useRef } from 'react'
+import { yearProgress } from '../constants/timeline'
+import { loadSceneCsv, mapSceneYearData } from '../data'
 import { sceneFactories } from '../scenes'
 
 /**
- * Mounts a Three.js scene from src/scenes/index.js.
+ * Mounts a Three.js scene and wires the timeline + CSV data pipeline.
  *
- * Timeline wiring: when `year` is provided, this component calls the scene's
- * `applyYear(year)` on mount and whenever the user selects a new year on the
- * timeline. Implement year-driven visuals in each scene's applyYear() function.
+ * On year change:
+ * 1. loadSceneCsv(variant)  → public/data/{variant}.csv
+ * 2. mapSceneYearData()     → src/data/mapYearData.js
+ * 3. applyYear({ year, data, progress }) → src/scenes/{variant}Scene.js
  */
+
 function disposeObject(object) {
   object.traverse((child) => {
     if (child.geometry) {
@@ -68,14 +72,40 @@ export default function ThreePanel({ variant, label, year }) {
       renderer.dispose()
       applyYearRef.current = null
     }
+    // year intentionally omitted — scene updates via applyYear effect, not remount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variant, label])
 
-  // Timeline → scene: forwards the selected year to applyYear() in scenes/index.js
+  // Timeline + CSV → scene: loads data for the year, then calls applyYear()
   useEffect(() => {
-    if (year !== undefined) {
-      applyYearRef.current?.(year)
+    if (year === undefined) return
+
+    let cancelled = false
+
+    const updateFromYear = async () => {
+      const progress = yearProgress(year)
+      let data = { year }
+
+      if (variant !== 'future') {
+        try {
+          const rows = await loadSceneCsv(variant)
+          if (cancelled) return
+          data = mapSceneYearData(variant, rows, year)
+        } catch (error) {
+          console.warn(`[data] Failed to load CSV for "${variant}" year ${year}`, error)
+        }
+      }
+
+      if (cancelled) return
+      applyYearRef.current?.({ year, data, progress })
     }
-  }, [year])
+
+    updateFromYear()
+
+    return () => {
+      cancelled = true
+    }
+  }, [year, variant])
 
   return (
     <div className="three-panel" ref={containerRef} role="img" aria-label={label} />

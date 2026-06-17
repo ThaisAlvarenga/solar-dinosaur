@@ -12,7 +12,9 @@ A React + Vite website with three side-by-side Three.js scenes (energy, CO2, and
 | Change timeline look (spark, tail, track) | **`src/components/Timeline.css`** |
 | Change Look Ahead / Back / menu button style | **`src/index.css`** (`.chrome-cta`) |
 | Change page background or global colors | **`src/index.css`** |
-| Change Three.js scenes | **`src/scenes/index.js`** |
+| Change Three.js scene visuals | **`src/scenes/{energy,co2,saving,future}Scene.js`** |
+| Replace / add CSV data per year | **`public/data/{energy,co2,saving}.csv`** |
+| Map CSV columns → scene values | **`src/data/mapYearData.js`** |
 
 This guide assumes you are starting on a machine with **no development tools installed** yet.
 
@@ -258,30 +260,45 @@ solar-dinosaur/
 ├── eslint.config.js        # Linting rules
 │
 ├── public/                 # Static files served as-is (not processed by React)
-│   └── icons.svg           # SVG icons used elsewhere in the template
+│   ├── data/               # CSV files loaded when the timeline year changes
+│   │   ├── energy.csv
+│   │   ├── co2.csv
+│   │   └── saving.csv
+│   └── icons.svg
 │
-└── src/                    # Application source code
-    ├── main.jsx            # React entry point; mounts <App /> into index.html
-    ├── index.css           # Global styles (black theme, typography, #root layout, .chrome-cta buttons)
-    ├── App.jsx             # Page structure, carousel state, menu routing, timeline wiring
-    ├── App.css             # Layout, triptych, carousel transitions, Back button stage, footer
+└── src/
+    ├── main.jsx
+    ├── index.css
+    ├── App.jsx
+    ├── App.css
     │
     ├── constants/
-    │   └── timeline.js     # Timeline year range, default year, yearProgress()
+    │   └── timeline.js     # Year range, default year, yearProgress()
+    │
+    ├── data/               # CSV loading and mapping (timeline → scenes)
+    │   ├── parseCsv.js     # CSV parser
+    │   ├── loadYearData.js # fetch /data/{scene}.csv
+    │   ├── mapYearData.js  # PLEASE WORK HERE — map CSV columns per scene
+    │   └── index.js
     │
     ├── components/
-    │   ├── ThreePanel.jsx  # React wrapper that mounts and runs a Three.js scene
-    │   ├── Timeline.jsx    # Clickable 2021–2026 timeline + Look Ahead button
-    │   ├── Timeline.css    # Timeline track, energy spark dot, progress tail, CTA positioning
-    │   ├── SiteMenu.jsx    # solar-dinosaur logo toggle + full-screen menu overlay
-    │   ├── SiteMenu.css    # Menu overlay and large menu link buttons
-    │   ├── ContentPage.jsx # Placeholder content for non-main menu pages
-    │   └── ContentPage.css # Content page layout and typography
+    │   ├── ThreePanel.jsx  # Mounts scenes; loads CSV; calls applyYear({ year, data })
+    │   ├── Timeline.jsx
+    │   ├── Timeline.css
+    │   ├── SiteMenu.jsx
+    │   ├── SiteMenu.css
+    │   ├── ContentPage.jsx
+    │   └── ContentPage.css
     │
-    ├── scenes/
-    │   └── index.js        # All Three.js scene definitions (triptych + Future)
+    ├── scenes/             # One file per Three.js scene
+    │   ├── shared.js       # Renderer, camera, lights helpers
+    │   ├── energyScene.js  # PLEASE WORK HERE — energy visualization + applyYear
+    │   ├── co2Scene.js
+    │   ├── savingScene.js
+    │   ├── futureScene.js
+    │   └── index.js        # sceneFactories registry
     │
-    └── assets/             # Images and SVGs imported by React components
+    └── assets/
         ├── hero.png
         ├── react.svg
         └── vite.svg
@@ -293,9 +310,67 @@ solar-dinosaur/
 2. **`App.jsx`** holds **year**, **lookAheadActive**, **showFuture**, **menuOpen**, and **siteView** state. It lays out: header (**SiteMenu**) → main content (triptych/Future or **ContentPage**) → timeline chrome (timeline + Back button) → footer.
 3. Clicking **solar-dinosaur** in the header opens the **SiteMenu** overlay. **Main site** shows the triptych + timeline; other links show **ContentPage** placeholders.
 4. The **triptych** renders three **`ThreePanel`** components (`"energy"`, `"co2"`, `"saving"`), each receiving the current `year`.
-5. **`ThreePanel`** looks up the variant in **`src/scenes/index.js`**, creates the scene, and runs the animation loop. When `year` changes, it calls each scene’s `applyYear()` function.
+5. **`ThreePanel`** creates the scene, loads **`public/data/{variant}.csv`** for the selected year, maps it in **`mapYearData.js`**, and calls **`applyYear({ year, data, progress })`** in the matching scene file.
 6. **`Timeline`** displays years **2021–2026** plus a **Look Ahead** button. Clicking a year updates all three triptych scenes. Clicking **Look Ahead** triggers the carousel transition to the **Future** scene.
 7. **`App.css`** defines scene carousel animations (panels slide apart; Future slides in). **`Timeline.css`** handles the energy-themed timeline. Shared pill button styles live in **`index.css`** as **`.chrome-cta`** (used by Look Ahead and Back).
+
+---
+
+## Data visualization template (CSV + timeline)
+
+This repo is structured as a **template for year-driven data visualization**. Each triptych panel has its own scene file and its own CSV.
+
+### Data flow
+
+```text
+User clicks year on timeline
+        ↓
+App.jsx updates `year` prop on each ThreePanel
+        ↓
+ThreePanel fetches public/data/{variant}.csv
+        ↓
+mapSceneYearData() in src/data/mapYearData.js
+        ↓
+applyYear({ year, data, progress }) in src/scenes/{variant}Scene.js
+```
+
+### Where to work (by role)
+
+| Task | File | Look for |
+|------|------|----------|
+| **Replace dataset** | `public/data/energy.csv` (etc.) | `year` column + your columns |
+| **Map CSV → scene values** | `src/data/mapYearData.js` | `PLEASE WORK HERE FOR … DATA MAPPING` |
+| **Build the 3D visualization** | `src/scenes/energyScene.js` (etc.) | `PLEASE WORK HERE FOR … — build your Three.js visualization` |
+| **Update scene from data** | same scene file | `PLEASE WORK HERE FOR … — apply CSV data` inside `applyYear()` |
+| **Animation** | same scene file | `PLEASE WORK HERE FOR … — per-frame animation` |
+
+### CSV format
+
+One file per scene in **`public/data/`**, with a row per timeline year:
+
+```csv
+year,generation_twh,capacity_gw
+2021,32.1,12.4
+2022,38.6,15.2
+```
+
+Column names can use `snake_case` or `camelCase`. Map them in **`mapYearData.js`** so each scene receives a clean `data` object.
+
+### applyYear API
+
+Every triptych scene receives the same shape when the year changes:
+
+```js
+applyYear({ year, data, progress })
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `year` | `number` | Selected timeline year (e.g. 2024) |
+| `data` | `object` | Output of `mapSceneYearData()` for this scene |
+| `progress` | `number` | `0` at first year → `1` at last year (`yearProgress()`) |
+
+The Future scene does not load CSV data by default.
 
 ---
 
@@ -484,7 +559,7 @@ Each triptych scene factory in **`src/scenes/index.js`** returns an `applyYear(y
 export const TIMELINE_YEARS = [2021, 2022, 2023, 2024, 2025, 2026]
 ```
 
-If you change the range, update each triptych scene’s `applyYear()` logic in **`src/scenes/index.js`** so the visual changes still match your years. You may also need to adjust the track line width in **`Timeline.css`** (`--timeline-year-columns` / `--timeline-total-columns`).
+If you change the range, update each triptych scene’s `applyYear()` in **`src/scenes/{energy,co2,saving}Scene.js`** and add matching rows to the CSV files. You may also need to adjust the track line width in **`Timeline.css`** (`--timeline-year-columns` / `--timeline-total-columns`).
 
 **Change the default starting year** — edit `DEFAULT_YEAR` in the same constants file.
 
@@ -497,7 +572,7 @@ If you change the range, update each triptych scene’s `applyYear()` logic in *
 
 **Change shared button style (Look Ahead + Back + menu):** edit **`.chrome-cta`** in **`src/index.css`**.
 
-**Change what happens when a year is selected** — edit the `applyYear()` function inside each triptych scene in **`src/scenes/index.js`**.
+**Change what happens when a year is selected** — edit `applyYear()` in **`src/scenes/{energy,co2,saving}Scene.js`** and column mapping in **`src/data/mapYearData.js`**.
 
 ---
 
@@ -536,7 +611,7 @@ Selecting a year on the timeline while still on the triptych updates scenes with
 |------|---------|
 | **`src/App.jsx`** | `lookAheadActive`, `showFuture` state; carousel markup; **Back** button |
 | **`src/App.css`** | `.scene-carousel`, `.scene-carousel--future`, panel slide transforms, `.future-stage`, `.chrome-carousel`, `.back-stage` |
-| **`src/scenes/index.js`** | `createFutureScene()` factory |
+| **`src/scenes/futureScene.js`** | `createFutureScene()` factory |
 | **`src/components/ThreePanel.jsx`** | Mounts the `future` variant (no `year` prop required) |
 | **`src/index.css`** | **`.chrome-cta`** shared button style for Look Ahead and Back |
 
@@ -573,7 +648,7 @@ Carousel markup in **`App.jsx`**:
 
 ### The Future scene
 
-`createFutureScene()` in **`src/scenes/index.js`** renders a distinct futuristic visualization:
+`createFutureScene()` in **`src/scenes/futureScene.js`** renders a distinct futuristic visualization:
 
 - Cyan glowing icosahedron core
 - Purple wireframe outer shell
@@ -587,7 +662,7 @@ Unlike the triptych scenes, the Future scene does **not** respond to timeline ye
 | Goal | Where to edit |
 |------|----------------|
 | Change slide animation speed or direction | **`src/App.css`** — `.triptych-panel` transitions and `.scene-carousel--future` transforms |
-| Change what the Future scene looks like | **`src/scenes/index.js`** — `createFutureScene()` |
+| Change what the Future scene looks like | **`src/scenes/futureScene.js`** — `createFutureScene()` |
 | Change when Future mounts or unmounts | **`src/App.jsx`** — `showFuture` / `lookAheadActive` logic |
 | Change Look Ahead or Back button label or style | **`Timeline.jsx`** / **`App.jsx`** for labels; **`.chrome-cta`** in **`index.css`** for shared style; **`.timeline-cta`** in **`Timeline.css`** for Look Ahead position |
 | Change Back button placement | **`App.css`** — `.back-stage` |
@@ -600,18 +675,18 @@ On viewports **1024px and below**, the carousel uses vertical slides (panels mov
 
 ### Where the scene code is
 
-All Three.js scene logic lives in **`src/scenes/index.js`**.
+Each scene has its own file under **`src/scenes/`**:
 
-That file defines four scene factory functions:
+| File | `variant` | View |
+|------|-----------|------|
+| **`energyScene.js`** | `"energy"` | Triptych (left) |
+| **`co2Scene.js`** | `"co2"` | Triptych (center) |
+| **`savingScene.js`** | `"saving"` | Triptych (right) |
+| **`futureScene.js`** | `"future"` | Full-width (Look Ahead) |
+| **`shared.js`** | — | Shared renderer, camera, lights |
+| **`index.js`** | — | `sceneFactories` registry |
 
-| Function | `variant` in App.jsx | View | What it shows |
-|----------|----------------------|------|----------------|
-| `createEnergyScene()` | `"energy"` | Triptych (left) | Rotating energy core with corona and orbit ring |
-| `createCo2Scene()` | `"co2"` | Triptych (center) | Purple torus knot with ring |
-| `createSavingScene()` | `"saving"` | Triptych (right) | Low-poly figure on a ground disc |
-| `createFutureScene()` | `"future"` | Full-width (Look Ahead) | Cyan core, wireframe shell, orbiting nodes, accent ring |
-
-They are registered at the bottom of the file in `sceneFactories`:
+They are registered in **`src/scenes/index.js`**:
 
 ```js
 export const sceneFactories = {
@@ -622,7 +697,7 @@ export const sceneFactories = {
 }
 ```
 
-**`src/components/ThreePanel.jsx`** handles the canvas, resizing, render loop, cleanup, and calling `applyYear()` when the year changes. The `future` variant is created without a year and skips year updates.
+**`src/components/ThreePanel.jsx`** handles the canvas, CSV loading, resizing, render loop, cleanup, and calling `applyYear({ year, data, progress })` when the year changes.
 
 **`src/App.jsx`** wires triptych panels via `variant` and `year`; the Future panel uses only `variant="future"`:
 
@@ -636,55 +711,52 @@ export const sceneFactories = {
 ### How to edit an existing scene
 
 1. Start the dev server: `npm run dev`
-2. Open **`src/scenes/index.js`** in your editor
-3. Find the function for the panel you want to change (e.g. `createEnergyScene`)
-4. Edit meshes, materials, lights, camera position, or animation
-5. Save the file — Vite hot-reloads and the browser updates automatically
+2. Open the scene file (e.g. **`src/scenes/energyScene.js`**)
+3. Work in the sections marked **`PLEASE WORK HERE FOR …`**
+4. Update **`public/data/{variant}.csv`** and **`src/data/mapYearData.js`** if your data columns change
+5. Save — Vite hot-reloads automatically
 
-Each scene function follows the same pattern:
+Each triptych scene follows the same pattern:
 
 ```js
 export function createEnergyScene(initialYear) {
   const scene = new THREE.Scene()
-  const camera = createCamera()
-  const renderer = createRenderer()
+  // ...
 
-  // Add lights, meshes, groups to scene...
+  // PLEASE WORK HERE — build visualization
+  const mesh = new THREE.Mesh(...)
+  scene.add(mesh)
 
-  const applyYear = (year) => {
-    // Update scene based on selected timeline year
+  // PLEASE WORK HERE — apply CSV data on year change
+  const applyYear = ({ year, data = {}, progress }) => {
+    // use data.generationTwh, etc.
   }
 
-  const animate = () => {
-    // Update rotations, positions, etc. each frame
-  }
+  // PLEASE WORK HERE — per-frame animation
+  const animate = () => { /* ... */ }
 
-  applyYear(initialYear)
-
-  return { scene, camera, renderer, animate, applyYear, objects: [/* meshes to dispose */] }
+  return { scene, camera, renderer, animate, applyYear, objects: [mesh] }
 }
 ```
 
 Common edits:
 
-- **Colors:** change `color`, `emissive`, or `opacity` in `MeshStandardMaterial` / `MeshBasicMaterial`
-- **Shapes:** swap `IcosahedronGeometry`, `TorusKnotGeometry`, `BoxGeometry`, etc.
-- **Motion:** edit the `animate` function (rotation speed, bobbing, etc.)
-- **Camera:** adjust `camera.position.set(x, y, z)` inside the scene function
-- **Lighting:** modify `addLights()` or add more lights in a specific scene
-- **Timeline behavior:** edit `applyYear()` in each scene, or constants in **`src/constants/timeline.js`** (see [Timeline](#timeline) above)
+- **Colors / shapes / motion:** scene file (`*Scene.js`)
+- **Data per year:** `public/data/*.csv` + `mapYearData.js` + `applyYear()` in scene file
+- **Timeline range:** **`src/constants/timeline.js`**
 
-Any new mesh or group you add to a scene should also be listed in the `objects` array in the return value so **`ThreePanel`** can dispose of it cleanly when the component unmounts.
+Any new mesh or group should be listed in the `objects` array so **`ThreePanel`** can dispose of it on unmount.
 
 ### How to add a new scene
 
-1. Add a new factory function in **`src/scenes/index.js`** (copy an existing one as a template)
-2. Register it in `sceneFactories` with a new key, e.g. `moon: createMoonScene`
-3. In **`src/App.jsx`**, add a new triptych panel and `<ThreePanel variant="moon" label="Moon scene" year={year} />`, or mount it in the carousel if it replaces the Future view
-4. In **`src/App.jsx`**, add a new triptych panel and `<ThreePanel variant="moon" label="Moon scene" year={year} />`, or mount it in the carousel if it replaces the Future view
-5. Update nav links in **`src/components/SiteMenu.jsx`** and styles in **`App.css`** if needed
+1. Copy **`src/scenes/energyScene.js`** → **`src/scenes/moonScene.js`** (or similar)
+2. Register it in **`src/scenes/index.js`** → `sceneFactories`
+3. Add **`public/data/moon.csv`** and a mapper in **`src/data/mapYearData.js`**
+4. Add **`DATA_SCENES`** entry in **`src/data/loadYearData.js`** if it uses CSV
+5. In **`src/App.jsx`**, add `<ThreePanel variant="moon" label="Moon scene" year={year} />`
+6. Update styles in **`App.css`** if layout changes
 
-For a scene that does not use the timeline, follow the `createFutureScene()` pattern (no `year` argument, no-op `applyYear`).
+For a scene without timeline/CSV, follow **`futureScene.js`** (no `year` argument, no-op `applyYear`).
 
 ### Three.js reference
 
