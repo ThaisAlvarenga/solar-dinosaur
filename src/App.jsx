@@ -3,6 +3,7 @@ import ThreePanel from './components/ThreePanel'
 import Timeline from './components/Timeline'
 import SiteMenu from './components/SiteMenu'
 import ContentPage from './components/ContentPage'
+import BackButton from './components/BackButton'
 import { DEFAULT_YEAR, TIMELINE_YEARS } from './constants/timeline'
 import './App.css'
 
@@ -11,39 +12,62 @@ function App() {
   const [lookAheadActive, setLookAheadActive] = useState(false)
   const [showFuture, setShowFuture] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [siteView, setSiteView] = useState('main')
+  const [contentView, setContentView] = useState('artist-statement')
+  const [showContent, setShowContent] = useState(false)
+  const [contentActive, setContentActive] = useState(false)
 
-  const resetToMainSite = () => {
+  const isMainView = !contentActive
+
+  const activeMenuView = lookAheadActive
+    ? 'look-ahead'
+    : contentActive
+      ? contentView
+      : 'main'
+
+  const closeContent = () => {
+    setContentActive(false)
     setLookAheadActive(false)
     setYear(DEFAULT_YEAR)
-    setSiteView('main')
+  }
+
+  const openContent = (viewId) => {
+    setLookAheadActive(false)
+    setContentView(viewId)
+    setShowContent(true)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setContentActive(true))
+    })
   }
 
   const handleYearChange = (nextYear) => {
-    setLookAheadActive(false)
+    closeContent()
     setYear(nextYear)
-    setSiteView('main')
   }
 
   const handleGoBack = () => {
-    resetToMainSite()
-  }
-
-  const handleLookAhead = () => {
-    setLookAheadActive(true)
-    setShowFuture(true)
-    setYear(TIMELINE_YEARS[TIMELINE_YEARS.length - 1])
-    setSiteView('main')
-  }
-
-  const handleNavigate = (viewId) => {
-    if (viewId === 'main') {
-      resetToMainSite()
+    if (contentActive) {
+      closeContent()
       return
     }
 
     setLookAheadActive(false)
-    setSiteView(viewId)
+    setYear(DEFAULT_YEAR)
+  }
+
+  const handleLookAhead = () => {
+    setContentActive(false)
+    setLookAheadActive(true)
+    setShowFuture(true)
+    setYear(TIMELINE_YEARS[TIMELINE_YEARS.length - 1])
+  }
+
+  const handleNavigate = (viewId) => {
+    if (viewId === 'main') {
+      closeContent()
+      return
+    }
+
+    openContent(viewId)
   }
 
   useEffect(() => {
@@ -59,50 +83,62 @@ function App() {
     return () => window.removeEventListener('keydown', handleEscape)
   }, [menuOpen])
 
-  const isMainView = siteView === 'main'
-
   return (
     <>
       <header className="site-header">
         <SiteMenu
           isOpen={menuOpen}
           onToggle={setMenuOpen}
+          activeView={activeMenuView}
           onNavigate={handleNavigate}
+          onLookAhead={handleLookAhead}
         />
       </header>
 
       <main className="site-main">
-        {isMainView && <div className="ticks"></div>}
+        <div className={`view-carousel${contentActive ? ' view-carousel--content' : ''}`}>
+          <div className="main-view-stage" aria-hidden={contentActive}>
+            {isMainView && <div className="ticks"></div>}
 
-        {isMainView ? (
-          <div className={`scene-carousel${lookAheadActive ? ' scene-carousel--future' : ''}`}>
-            <section id="main" className="triptych" aria-hidden={lookAheadActive}>
-              <div id="energy" className="triptych-panel triptych-panel--energy">
-                <ThreePanel variant="energy" label="Energy scene" year={year} />
-              </div>
+            <div className={`scene-carousel${lookAheadActive ? ' scene-carousel--future' : ''}`}>
+              <section id="main" className="triptych" aria-hidden={lookAheadActive}>
+                <div id="energy" className="triptych-panel triptych-panel--energy">
+                  <ThreePanel variant="energy" label="Energy scene" year={year} />
+                </div>
 
-              <div id="co2" className="triptych-panel triptych-panel--co2">
-                <ThreePanel variant="co2" label="CO2 scene" year={year} />
-              </div>
+                <div id="co2" className="triptych-panel triptych-panel--co2">
+                  <ThreePanel variant="co2" label="CO2 scene" year={year} />
+                </div>
 
-              <div id="saving" className="triptych-panel triptych-panel--saving">
-                <ThreePanel variant="saving" label="Saving scene" year={year} />
-              </div>
-            </section>
-
-            {showFuture && (
-              <section className="future-stage" aria-label="Future scene">
-                <ThreePanel variant="future" label="Future scene" />
+                <div id="saving" className="triptych-panel triptych-panel--saving">
+                  <ThreePanel variant="saving" label="Saving scene" year={year} />
+                </div>
               </section>
-            )}
+
+              {showFuture && (
+                <section className="future-stage" aria-label="Future scene">
+                  <ThreePanel variant="future" label="Future scene" />
+                </section>
+              )}
+            </div>
           </div>
-        ) : (
-          <ContentPage view={siteView} />
-        )}
+
+          {showContent && (
+            <section
+              className="content-view-stage"
+              aria-hidden={!contentActive}
+              aria-label="Content page"
+            >
+              <ContentPage view={contentView} />
+            </section>
+          )}
+        </div>
       </main>
 
-      {isMainView && (
-        <div className={`chrome-carousel${lookAheadActive ? ' chrome-carousel--future' : ''}`}>
+      {(isMainView || showContent) && (
+        <div
+          className={`chrome-carousel${lookAheadActive ? ' chrome-carousel--future' : ''}${contentActive ? ' chrome-carousel--content' : ''}`}
+        >
           <div className="timeline-stage">
             <Timeline
               year={year}
@@ -112,12 +148,15 @@ function App() {
             />
           </div>
 
+          {showContent && (
+            <div className="content-back-stage">
+              <BackButton onClick={handleGoBack} />
+            </div>
+          )}
+
           {showFuture && (
             <div className="back-stage">
-              <button type="button" className="chrome-cta" onClick={handleGoBack}>
-                <span className="chrome-cta-arrow" aria-hidden="true">&lt;--</span>
-                <span className="chrome-cta-label">Back</span>
-              </button>
+              <BackButton onClick={handleGoBack} />
             </div>
           )}
         </div>
