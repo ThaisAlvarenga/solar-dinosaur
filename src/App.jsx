@@ -168,7 +168,7 @@ function App() {
       )}
 
       <footer className="site-footer">
-        <p>&copy; {new Date().getFullYear()} solar-dinosaur. Built with React and Vite.</p>
+        <p>&copy; {new Date().getFullYear()} Fulton County Solar Data. Built with React and Vite.</p>
       </footer>
     </>
   )

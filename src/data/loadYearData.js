@@ -1,23 +1,50 @@
 import { parseCsv } from './parseCsv'
+import { parseDataTest } from './parseDataTest'
 
 /** Scene keys that load CSV data from public/data/{variant}.csv */
 export const DATA_SCENES = ['energy', 'co2', 'saving']
 
 const csvCache = new Map()
+let dataTestCache = null
+
+/**
+ * Loads and parses DataTest.csv for the CO2 building map prototype.
+ * @returns {Promise<ReturnType<typeof parseDataTest>>}
+ */
+export async function loadDataTestDataset() {
+  if (dataTestCache) {
+    return dataTestCache
+  }
+
+  const response = await fetch('/data/DataTest.csv')
+
+  if (!response.ok) {
+    console.warn('[data] Missing or unreadable CSV: /data/DataTest.csv')
+    dataTestCache = parseDataTest('')
+    return dataTestCache
+  }
+
+  const text = await response.text()
+  dataTestCache = parseDataTest(text)
+  return dataTestCache
+}
 
 /**
  * Loads and parses a scene CSV from public/data/.
  * Files are cached in memory after the first fetch.
  *
- * Expected layout: public/data/energy.csv, public/data/co2.csv, public/data/saving.csv
- * Each file should include a `year` column plus your data columns.
+ * For `co2`, loads the wide-format DataTest.csv via loadDataTestDataset().
  *
  * @param {string} variant - Scene key (energy | co2 | saving)
- * @returns {Promise<Record<string, string>[]>}
+ * @returns {Promise<Record<string, string>[] | ReturnType<typeof parseDataTest>>}
  */
 export async function loadSceneCsv(variant) {
   if (!DATA_SCENES.includes(variant)) {
     return []
+  }
+
+  if (variant === 'co2') {
+    return loadDataTestDataset()
   }
 
   if (csvCache.has(variant)) {
