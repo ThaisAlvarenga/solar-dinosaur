@@ -155,6 +155,7 @@ function App() {
               onYearChange={handleYearChange}
               lookAheadActive={lookAheadActive}
               onLookAhead={handleLookAhead}
+              scrollEnabled={isMainView && !lookAheadActive && !menuOpen}
             />
           </div>
 
