@@ -1,4 +1,5 @@
 import { TIMELINE_YEARS } from '../constants/timeline'
+import ChromeCtaArrow from './ChromeCtaArrow'
 import './Timeline.css'
 
 function getProgressWidth(year, lookAheadActive) {
@@ -42,7 +43,7 @@ export default function Timeline({ year, onYearChange, lookAheadActive = false, 
               aria-pressed={lookAheadActive}
             >
               <span className="chrome-cta-label">Look Ahead</span>
-              <span className="chrome-cta-arrow" aria-hidden="true">--&gt;</span>
+              <ChromeCtaArrow direction="right" />
             </button>
           </li>
         </ul>

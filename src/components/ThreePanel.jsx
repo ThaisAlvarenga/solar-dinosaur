@@ -27,20 +27,23 @@ function disposeObject(object) {
   })
 }
 
-export default function ThreePanel({ variant, label, year }) {
+export default function ThreePanel({ variant, label, year, particleTheme }) {
   const containerRef = useRef(null)
   const applyYearRef = useRef(null)
+  const setParticleThemeRef = useRef(null)
 
   useEffect(() => {
     const container = containerRef.current
     const createScene = sceneFactories[variant]
     if (!container || !createScene) return
 
-    const { scene, camera, renderer, animate, applyYear, objects } =
+    const { scene, camera, renderer, animate, applyYear, objects, setupInteraction, disposeInteraction, setParticleTheme } =
       variant === 'future' ? createScene() : createScene(year)
     applyYearRef.current = applyYear
+    setParticleThemeRef.current = setParticleTheme ?? null
     renderer.domElement.setAttribute('aria-label', label)
     container.appendChild(renderer.domElement)
+    setupInteraction?.(renderer.domElement)
 
     const resize = () => {
       const width = container.clientWidth
@@ -67,10 +70,12 @@ export default function ThreePanel({ variant, label, year }) {
     return () => {
       cancelAnimationFrame(frameId)
       resizeObserver.disconnect()
+      disposeInteraction?.()
       container.removeChild(renderer.domElement)
       objects.forEach(disposeObject)
       renderer.dispose()
       applyYearRef.current = null
+      setParticleThemeRef.current = null
     }
     // year intentionally omitted — scene updates via applyYear effect, not remount
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,6 +111,11 @@ export default function ThreePanel({ variant, label, year }) {
       cancelled = true
     }
   }, [year, variant])
+
+  useEffect(() => {
+    if (variant !== 'future' || !particleTheme) return
+    setParticleThemeRef.current?.(particleTheme)
+  }, [variant, particleTheme])
 
   return (
     <div className="three-panel" ref={containerRef} role="img" aria-label={label} />

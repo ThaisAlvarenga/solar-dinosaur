@@ -4,6 +4,7 @@ import Timeline from './components/Timeline'
 import SiteMenu from './components/SiteMenu'
 import ContentPage from './components/ContentPage'
 import BackButton from './components/BackButton'
+import FutureOverlay from './components/FutureOverlay'
 import { DEFAULT_YEAR, TIMELINE_YEARS } from './constants/timeline'
 import './App.css'
 
@@ -15,6 +16,7 @@ function App() {
   const [contentView, setContentView] = useState('artist-statement')
   const [showContent, setShowContent] = useState(false)
   const [contentActive, setContentActive] = useState(false)
+  const [futureMetric, setFutureMetric] = useState('energy')
 
   const isMainView = !contentActive
 
@@ -58,6 +60,7 @@ function App() {
     setContentActive(false)
     setLookAheadActive(true)
     setShowFuture(true)
+    setFutureMetric('energy')
     setYear(TIMELINE_YEARS[TIMELINE_YEARS.length - 1])
   }
 
@@ -117,7 +120,14 @@ function App() {
 
               {showFuture && (
                 <section className="future-stage" aria-label="Future scene">
-                  <ThreePanel variant="future" label="Future scene" />
+                  <ThreePanel variant="future" label="Future scene" particleTheme={futureMetric} />
+                  {lookAheadActive && (
+                    <FutureOverlay
+                      onBack={handleGoBack}
+                      activeMetric={futureMetric}
+                      onMetricChange={setFutureMetric}
+                    />
+                  )}
                 </section>
               )}
             </div>
@@ -135,9 +145,9 @@ function App() {
         </div>
       </main>
 
-      {(isMainView || showContent) && (
+      {(isMainView || showContent) && !lookAheadActive && (
         <div
-          className={`chrome-carousel${lookAheadActive ? ' chrome-carousel--future' : ''}${contentActive ? ' chrome-carousel--content' : ''}`}
+          className={`chrome-carousel${contentActive ? ' chrome-carousel--content' : ''}`}
         >
           <div className="timeline-stage">
             <Timeline
@@ -150,12 +160,6 @@ function App() {
 
           {showContent && (
             <div className="content-back-stage">
-              <BackButton onClick={handleGoBack} />
-            </div>
-          )}
-
-          {showFuture && (
-            <div className="back-stage">
               <BackButton onClick={handleGoBack} />
             </div>
           )}

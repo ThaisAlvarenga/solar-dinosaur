@@ -151,6 +151,13 @@
     transform 0.7s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.55s ease 0.08s;
   pointer-events: none;
+  overflow: hidden;
+  background: #000;
+}
+
+.future-stage .three-panel {
+  position: absolute;
+  inset: 0;
 }
 
 .scene-carousel--future .future-stage {
