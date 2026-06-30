@@ -1,3 +1,4 @@
+export { calcCo2SavedLbs, DEFAULT_EMISSION_RATE_LB_PER_MWH } from './co2Emissions'
 export { resolveBuildingId, getBuildingDisplayName, resolveBuildingRecord } from './buildingRegistry'
 export { parseCsv } from './parseCsv'
 export { parseDataTest, slugifyBuildingName } from './parseDataTest'

@@ -23,6 +23,11 @@ export function lerpColor(colorA, colorB, alpha) {
   return new THREE.Color(colorA).lerp(new THREE.Color(colorB), alpha)
 }
 
+/** Whether a building has solar data for the selected timeline year. */
+export function isBuildingActive(stats) {
+  return Boolean(stats?.active)
+}
+
 /**
  * @typedef {object} YearUpdate
  * @property {number} year

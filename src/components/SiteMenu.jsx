@@ -100,6 +100,19 @@ export default function SiteMenu({
         solar-dinosaur
       </button>
 
+      {isOpen && (
+        <button
+          type="button"
+          className="menu-close"
+          onClick={closeMenu}
+          aria-label="Close menu"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6L18 18M18 6L6 18" />
+          </svg>
+        </button>
+      )}
+
       <div
         id="site-menu-overlay"
         className={`menu-overlay${isOpen ? ' is-open' : ''}`}

@@ -8746,11 +8746,14 @@
     2025,
     2026
   ],
+  "emissionRateLbPerMWh": 1392.345,
+  "emissionRateSource": "Excel $AM$3 — eGRID SRSO CO₂ rate (lb/MWh)",
   "sourceFiles": {
     "energy": "solar-data.xlsx",
-    "cost": "solar-cost.xlsx"
+    "cost": "solar-cost.xlsx",
+    "emissionRate": "Solar Monthly Savings *.xlsx"
   },
-  "importedAt": "2026-06-30T21:00:57.943Z",
+  "importedAt": "2026-06-30T21:21:36.466Z",
   "sheetNames": [
     "2021",
     "2022",

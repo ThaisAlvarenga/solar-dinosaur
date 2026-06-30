@@ -1,4 +1,5 @@
 import { resolveBuildingRecord } from './buildingRegistry.js'
+import { calcCo2SavedLbs, DEFAULT_EMISSION_RATE_LB_PER_MWH } from './co2Emissions.js'
 
 const YEAR_HEADER_RE = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})\s*-\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})$/i
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -230,6 +231,30 @@ export function mapSolarEnergyYear(dataset, year) {
     totalAnnualKwh,
     totalCumulativeKwh,
     generationTwh: totalAnnualKwh / 1_000_000_000,
+    buildings,
+  }
+}
+
+/**
+ * CO₂ stats using solar-data.json kWh and the Savings workbook formula:
+ * CO₂ saved (lbs) = (kWh / 1000) × emissionRateLbPerMWh ($AM$3)
+ */
+export function mapSolarCo2Year(dataset, year) {
+  const emissionRateLbPerMWh =
+    dataset.emissionRateLbPerMWh ?? DEFAULT_EMISSION_RATE_LB_PER_MWH
+  const energy = mapSolarEnergyYear(dataset, year)
+
+  const buildings = energy.buildings.map((building) => ({
+    ...building,
+    annualCo2Lbs: calcCo2SavedLbs(building.annualKwh, emissionRateLbPerMWh),
+    cumulativeCo2Lbs: calcCo2SavedLbs(building.cumulativeKwh, emissionRateLbPerMWh),
+  }))
+
+  return {
+    year,
+    emissionRateLbPerMWh,
+    totalAnnualCo2Lbs: calcCo2SavedLbs(energy.totalAnnualKwh, emissionRateLbPerMWh),
+    totalCumulativeCo2Lbs: calcCo2SavedLbs(energy.totalCumulativeKwh, emissionRateLbPerMWh),
     buildings,
   }
 }

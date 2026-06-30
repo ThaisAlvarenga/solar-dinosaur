@@ -1,7 +1,11 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import XLSX from 'xlsx'
+import {
+  DEFAULT_EMISSION_RATE_LB_PER_MWH,
+  readEmissionRateCell,
+} from '../src/data/co2Emissions.js'
 import { getBuildingDisplayName } from '../src/data/buildingRegistry.js'
 import { parseSolarCostSheet } from '../src/data/parseSolarCostWorkbook.js'
 import { parseSolarWorkbookSheets } from '../src/data/parseSolarWorkbook.js'
@@ -35,6 +39,25 @@ function mergeBuildingCatalog(energyBuildings, costBuildings) {
   return Array.from(buildingMap.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
+function findEmissionRateLbPerMWh() {
+  const savingsWorkbook = readdirSync(dataDir).find((name) =>
+    /^Solar Monthly Savings.*\.xlsx$/i.test(name),
+  )
+
+  if (savingsWorkbook) {
+    const workbook = XLSX.read(readFileSync(join(dataDir, savingsWorkbook)), { type: 'buffer' })
+    const sheet = workbook.Sheets.kWh ?? workbook.Sheets[workbook.SheetNames[0]]
+    const rate = readEmissionRateCell(sheet)
+    if (rate) {
+      console.log(`Emission rate ($AM$3) from ${savingsWorkbook}: ${rate} lb/MWh`)
+      return rate
+    }
+  }
+
+  console.log(`Emission rate ($AM$3): using default ${DEFAULT_EMISSION_RATE_LB_PER_MWH} lb/MWh`)
+  return DEFAULT_EMISSION_RATE_LB_PER_MWH
+}
+
 const energyWorkbook = XLSX.read(readFileSync(energyInputPath), { type: 'buffer' })
 const energySheets = energyWorkbook.SheetNames.map((sheetName) => ({
   sheetName,
@@ -64,9 +87,12 @@ const dataset = {
   buildings: mergeBuildingCatalog(energyData.buildings, costData.buildings),
   monthlyCost: costData.monthlyCost,
   costYears: costData.costYears,
+  emissionRateLbPerMWh: findEmissionRateLbPerMWh(),
+  emissionRateSource: 'Excel $AM$3 — eGRID SRSO CO₂ rate (lb/MWh)',
   sourceFiles: {
     energy: 'solar-data.xlsx',
     cost: 'solar-cost.xlsx',
+    emissionRate: 'Solar Monthly Savings *.xlsx',
   },
   importedAt: new Date().toISOString(),
   sheetNames: energyWorkbook.SheetNames,
