@@ -5,7 +5,8 @@
  */
 
 import { mapDataTestCo2 } from './mapDataTestCo2'
-import { mapSolarCo2Year, mapSolarEnergyYear } from './parseSolarWorkbook'
+import { mapSolarEnergyYear } from './parseSolarWorkbook'
+import { mapSolarSavingYear } from './parseSolarCostWorkbook'
 
 function rowForYear(rows, year) {
   return rows.find((row) => Number(row.year) === year) ?? {}
@@ -17,7 +18,7 @@ function toNumber(value, fallback = 0) {
 }
 
 function isSolarDataset(value) {
-  return Boolean(value?.buildings && value?.monthly && value?.years)
+  return Boolean(value?.buildings && value?.years && (value?.monthly || value?.monthlyCost))
 }
 
 function isDataTestDataset(value) {
@@ -43,12 +44,8 @@ export function mapEnergyYearData(datasetOrRows, year) {
   }
 }
 
-// CO2 scene — solar kWh × $AM$3 emission factor → per-building CO₂ saved (lbs).
+// CO2 scene — DataTest.csv wide-format dataset → per-building cumulative CO2 stats.
 export function mapCo2YearData(datasetOrRows, year) {
-  if (isSolarDataset(datasetOrRows)) {
-    return mapSolarCo2Year(datasetOrRows, year)
-  }
-
   if (isDataTestDataset(datasetOrRows)) {
     return mapDataTestCo2(datasetOrRows, year)
   }
@@ -64,8 +61,13 @@ export function mapCo2YearData(datasetOrRows, year) {
   }
 }
 
-// PLEASE WORK HERE FOR SAVING DATA MAPPING — shape CSV columns for the saving scene.
-export function mapSavingYearData(rows, year) {
+// Saving scene — solar-cost.xlsx (via solar-data.json) → per-building cost savings ($).
+export function mapSavingYearData(datasetOrRows, year) {
+  if (isSolarDataset(datasetOrRows) && datasetOrRows.monthlyCost?.length) {
+    return mapSolarSavingYear(datasetOrRows, year)
+  }
+
+  const rows = datasetOrRows
   const row = rowForYear(rows, year)
 
   return {

@@ -1,7 +1,7 @@
-import { DEFAULT_EMISSION_RATE_LB_PER_MWH } from './co2Emissions.js'
+﻿import { getBuildingDisplayName, resolveBuildingId, slugifyBuildingName } from './buildingRegistry.js'
 
 const MONTH_ROW_RE = /^[A-Za-z]{3}-\d{2}$/
-const DEFAULT_EMISSION_RATE = DEFAULT_EMISSION_RATE_LB_PER_MWH
+const DEFAULT_EMISSION_RATE = 1.392345
 
 const SUMMARY_COLUMNS = new Set([
   'Month',
@@ -15,13 +15,7 @@ const SUMMARY_COLUMNS = new Set([
  * Normalize a building name to a stable slug id.
  * @param {string} name
  */
-export function slugifyBuildingName(name) {
-  return name
-    .toLowerCase()
-    .replace(/neighbor-hood/g, 'neighborhood')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-}
+export { slugifyBuildingName } from './buildingRegistry.js'
 
 function splitCsvLine(line) {
   const values = []
@@ -73,38 +67,17 @@ function parseMonthLabel(label) {
   return { year, month }
 }
 
-function parseNumeric(value) {
-  if (value == null || value === '') return 0
-  const cleaned = String(value).replace(/[$,]/g, '').trim()
-  if (!cleaned || Number.isNaN(Number(cleaned))) return 0
-  return Number(cleaned)
-}
-
 function extractEmissionRate(lines) {
-  const headerLine = lines.find((line) => {
+  for (const line of lines.slice(0, 5)) {
     const values = splitCsvLine(line)
-    return values.some((value) => value.includes('eGRID') && value.includes('lb/MWh'))
-  })
+    const rateIndex = values.findIndex((value) =>
+      value.includes('eGRID') && value.includes('lb/MWh'),
+    )
+    if (rateIndex === -1) continue
 
-  if (!headerLine) {
-    return DEFAULT_EMISSION_RATE
-  }
-
-  const headers = splitCsvLine(headerLine)
-  const rateIndex = headers.findIndex(
-    (value) => value.includes('eGRID') && value.includes('lb/MWh'),
-  )
-
-  if (rateIndex === -1) {
-    return DEFAULT_EMISSION_RATE
-  }
-
-  for (const line of lines) {
-    const values = splitCsvLine(line)
-    const parsed = parseNumeric(values[rateIndex] ?? '')
-    if (parsed > 10) {
-      return parsed
-    }
+    const rateValue = values[rateIndex + 1] ?? values.find((value) => /^\d+\.\d+$/.test(value.trim()))
+    const parsed = parseKwh(rateValue ?? '')
+    if (parsed > 0) return parsed
   }
 
   return DEFAULT_EMISSION_RATE
@@ -137,8 +110,8 @@ export function parseDataTest(text) {
     if (!header || SUMMARY_COLUMNS.has(header)) return
     if (header.startsWith('eGRID')) return
 
-    const id = slugifyBuildingName(header)
-    buildingColumns.push({ id, name: header, columnIndex: index })
+    const id = resolveBuildingId(header)
+    buildingColumns.push({ id, name: getBuildingDisplayName(id), columnIndex: index })
   })
 
   const emissionRateLbPerMWh = extractEmissionRate(lines)

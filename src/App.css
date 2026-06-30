@@ -382,6 +382,40 @@
   letter-spacing: 0.03em;
 }
 
+.saving-building-label {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.35rem 0.65rem;
+  border: 1px solid rgb(34 197 94 / 45%);
+  border-radius: 2px;
+  background: rgb(0 0 0 / 72%);
+  color: #e8fff0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  text-align: right;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+.saving-building-label__name {
+  color: #e8fff0;
+}
+
+.saving-building-label__stat {
+  color: #4ade80;
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+}
+
 .ticks {
   position: relative;
   width: 100%;

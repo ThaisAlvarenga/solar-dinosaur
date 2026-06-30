@@ -45,10 +45,10 @@ export async function loadSceneCsv(variant) {
   }
 
   if (variant === 'co2') {
-    return loadSolarDataset()
+    return loadDataTestDataset()
   }
 
-  if (variant === 'energy') {
+  if (variant === 'energy' || variant === 'saving') {
     return loadSolarDataset()
   }
 
