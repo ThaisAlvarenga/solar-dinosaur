@@ -5,7 +5,7 @@
  */
 
 import { mapDataTestCo2 } from './mapDataTestCo2'
-import { mapSolarEnergyYear } from './parseSolarWorkbook'
+import { mapSolarCo2Year, mapSolarEnergyYear } from './parseSolarWorkbook'
 import { mapSolarSavingYear } from './parseSolarCostWorkbook'
 
 function rowForYear(rows, year) {
@@ -44,8 +44,12 @@ export function mapEnergyYearData(datasetOrRows, year) {
   }
 }
 
-// CO2 scene — DataTest.csv wide-format dataset → per-building cumulative CO2 stats.
+// CO2 scene — solar-data.json kWh × $AM$3 → per-building CO₂ saved (lbs).
 export function mapCo2YearData(datasetOrRows, year) {
+  if (isSolarDataset(datasetOrRows) && datasetOrRows.monthly?.length) {
+    return mapSolarCo2Year(datasetOrRows, year)
+  }
+
   if (isDataTestDataset(datasetOrRows)) {
     return mapDataTestCo2(datasetOrRows, year)
   }

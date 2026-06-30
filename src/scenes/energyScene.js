@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
-import { addLights, createCamera, createRenderer } from './shared'
+import { addLights, createCamera, createRenderer, isBuildingActive } from './shared'
 import { createSunBuilding } from './createSunBuilding'
 
 const BUILDING_SCALE = 0.091
@@ -80,12 +80,29 @@ export function createEnergyScene(initialYear) {
   let domElement = null
   let labelEl = null
   let hoveredId = null
+  let selectedId = null
+  let pendingYearPayload = null
 
-  const updateHoverLabel = () => {
-    if (!labelEl || !hoveredId) return
+  const getFocusedBuildingId = () => selectedId ?? hoveredId
 
-    const entry = buildingEntries.get(hoveredId)
-    const stats = (state.data.buildings ?? []).find((building) => building.id === hoveredId)
+  const hideBuildingLabel = () => {
+    if (!labelEl) return
+    labelEl.replaceChildren()
+    labelEl.hidden = true
+  }
+
+  const updateBuildingLabel = (statsOverride) => {
+    const focusedId = getFocusedBuildingId()
+    if (!labelEl || !focusedId) return
+
+    const entry = buildingEntries.get(focusedId)
+    const stats =
+      statsOverride ?? (state.data.buildings ?? []).find((building) => building.id === focusedId)
+
+    if (!isBuildingActive(stats)) {
+      hideBuildingLabel()
+      return
+    }
 
     labelEl.replaceChildren()
 
@@ -93,6 +110,11 @@ export function createEnergyScene(initialYear) {
     nameEl.className = 'energy-building-label__name'
     nameEl.textContent = entry?.name ?? ''
     labelEl.append(nameEl)
+
+    const yearEl = document.createElement('span')
+    yearEl.className = 'energy-building-label__year'
+    yearEl.textContent = String(state.year)
+    labelEl.append(yearEl)
 
     const statEl = document.createElement('span')
     statEl.className = 'energy-building-label__stat'
@@ -102,25 +124,23 @@ export function createEnergyScene(initialYear) {
     labelEl.hidden = false
   }
 
+  const refreshBuildingLabel = () => {
+    if (!getFocusedBuildingId()) {
+      hideBuildingLabel()
+      return
+    }
+
+    updateBuildingLabel()
+  }
+
   const setHoveredBuilding = (id) => {
     if (id === hoveredId) return
     hoveredId = id
 
-    if (!labelEl) {
-      if (domElement) {
-        domElement.style.cursor = id ? 'pointer' : ''
-      }
-      return
-    }
-
-    if (id) {
-      updateHoverLabel()
-    } else {
-      labelEl.hidden = true
-    }
+    refreshBuildingLabel()
 
     if (domElement) {
-      domElement.style.cursor = id ? 'pointer' : ''
+      domElement.style.cursor = id || selectedId ? 'pointer' : ''
     }
   }
 
@@ -136,26 +156,41 @@ export function createEnergyScene(initialYear) {
     }
   }
 
-  const applyYear = ({ year, data = {}, progress = yearProgress(year) }) => {
-    state.year = year
-    state.data = data
+  const syncFocusAfterYear = (statsById) => {
+    const focusedId = getFocusedBuildingId()
 
-    if (!state.ready) {
+    if (!focusedId) {
+      hideBuildingLabel()
       return
     }
 
+    const stats = statsById.get(focusedId)
+    if (!isBuildingActive(stats)) {
+      if (selectedId === focusedId) selectedId = null
+      if (hoveredId === focusedId) hoveredId = null
+      hideBuildingLabel()
+      return
+    }
+
+    updateBuildingLabel(stats)
+  }
+
+  const commitYear = ({ year, data = {}, progress = yearProgress(year) }) => {
     const statsById = new Map((data.buildings ?? []).map((building) => [building.id, building]))
     const maxAnnualKwh = Math.max(
       1,
-      ...(data.buildings ?? []).filter((b) => b.active).map((b) => b.annualKwh),
+      ...(data.buildings ?? []).filter((b) => isBuildingActive(b)).map((b) => b.annualKwh),
     )
 
     buildingEntries.forEach((entry, id) => {
       const stats = statsById.get(id)
-      const active = Boolean(stats?.active)
+      const active = isBuildingActive(stats)
 
       entry.sun.group.visible = active
-      if (!active) return
+      if (!active) {
+        entry.sun.setParticleCount(0)
+        return
+      }
 
       entry.sun.setParticleCount(kWhToParticleCount(stats.annualKwh, 80))
       entry.sun.setAnnualIntensity(stats.annualKwh, maxAnnualKwh)
@@ -165,15 +200,19 @@ export function createEnergyScene(initialYear) {
     })
 
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
+    syncFocusAfterYear(statsById)
+  }
 
-    if (hoveredId) {
-      const hoveredStats = statsById.get(hoveredId)
-      if (!hoveredStats?.active) {
-        setHoveredBuilding(null)
-      } else {
-        updateHoverLabel()
-      }
+  const applyYear = (payload) => {
+    state.year = payload.year
+    state.data = payload.data
+    pendingYearPayload = payload
+
+    if (!state.ready) {
+      return
     }
+
+    commitYear(payload)
   }
 
   const initBuildings = async () => {
@@ -218,7 +257,13 @@ export function createEnergyScene(initialYear) {
       })
 
       state.ready = true
-      applyYear({ year: state.year, data: state.data, progress: yearProgress(state.year) })
+      commitYear(
+        pendingYearPayload ?? {
+          year: state.year,
+          data: state.data,
+          progress: yearProgress(state.year),
+        },
+      )
     } catch (error) {
       console.warn('[energyScene] Failed to load building positions', error)
     }
@@ -244,23 +289,49 @@ export function createEnergyScene(initialYear) {
     return meshes
   }
 
-  const onPointerMove = (event) => {
-    if (!domElement) return
+  const pickBuildingAt = (event) => {
+    if (!domElement) return null
 
     const rect = domElement.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) return
+    if (rect.width === 0 || rect.height === 0) return null
 
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
 
     raycaster.setFromCamera(pointer, camera)
     const hits = raycaster.intersectObjects(getPickables(), false)
-    const hitId = hits[0]?.object?.userData?.energyBuildingId ?? null
-    setHoveredBuilding(hitId)
+    return hits[0]?.object?.userData?.energyBuildingId ?? null
+  }
+
+  const onPointerMove = (event) => {
+    setHoveredBuilding(pickBuildingAt(event))
   }
 
   const onPointerLeave = () => {
-    setHoveredBuilding(null)
+    hoveredId = null
+    refreshBuildingLabel()
+    if (domElement) {
+      domElement.style.cursor = selectedId ? 'pointer' : ''
+    }
+  }
+
+  const onPointerClick = (event) => {
+    const hitId = pickBuildingAt(event)
+    if (hitId) {
+      selectedId = selectedId === hitId ? null : hitId
+      refreshBuildingLabel()
+      if (domElement) {
+        domElement.style.cursor = 'pointer'
+      }
+      return
+    }
+
+    if (!selectedId) return
+    selectedId = null
+    refreshBuildingLabel()
+    if (domElement) {
+      domElement.style.cursor = hoveredId ? 'pointer' : ''
+    }
   }
 
   const setupInteraction = (element) => {
@@ -275,12 +346,14 @@ export function createEnergyScene(initialYear) {
 
     element.addEventListener('pointermove', onPointerMove)
     element.addEventListener('pointerleave', onPointerLeave)
+    element.addEventListener('click', onPointerClick)
   }
 
   const disposeInteraction = () => {
     if (domElement) {
       domElement.removeEventListener('pointermove', onPointerMove)
       domElement.removeEventListener('pointerleave', onPointerLeave)
+      domElement.removeEventListener('click', onPointerClick)
       domElement.style.cursor = ''
       domElement = null
     }
@@ -288,6 +361,7 @@ export function createEnergyScene(initialYear) {
     labelEl?.remove()
     labelEl = null
     hoveredId = null
+    selectedId = null
   }
 
   const animate = () => {

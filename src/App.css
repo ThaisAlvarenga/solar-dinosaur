@@ -336,10 +336,20 @@
   text-align: right;
   pointer-events: none;
   backdrop-filter: blur(4px);
+
+  &[hidden] {
+    display: none !important;
+  }
 }
 
 .co2-building-label__name {
   color: #e8f2ff;
+}
+
+.co2-building-label__year {
+  color: rgb(232 242 255 / 55%);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
 }
 
 .co2-building-label__stat {
@@ -370,10 +380,20 @@
   text-align: right;
   pointer-events: none;
   backdrop-filter: blur(4px);
+
+  &[hidden] {
+    display: none !important;
+  }
 }
 
 .energy-building-label__name {
   color: #fff4e0;
+}
+
+.energy-building-label__year {
+  color: rgb(255 244 224 / 55%);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
 }
 
 .energy-building-label__stat {
@@ -404,10 +424,20 @@
   text-align: right;
   pointer-events: none;
   backdrop-filter: blur(4px);
+
+  &[hidden] {
+    display: none !important;
+  }
 }
 
 .saving-building-label__name {
   color: #e8fff0;
+}
+
+.saving-building-label__year {
+  color: rgb(232 255 240 / 55%);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
 }
 
 .saving-building-label__stat {

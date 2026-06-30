@@ -1,5 +1,8 @@
 .site-menu {
   position: relative;
+  --menu-edge-inset-x: clamp(24px, 4vw, 48px);
+  --menu-edge-inset-y-top: 28px;
+  --orbit-icon-size: 54px;
 }
 
 .menu-toggle {
@@ -51,6 +54,51 @@
   pointer-events: auto;
 }
 
+.menu-close {
+  position: fixed;
+  top: var(--menu-edge-inset-y-top);
+  right: var(--menu-edge-inset-x);
+  left: auto;
+  z-index: 201;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--orbit-icon-size);
+  height: var(--orbit-icon-size);
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+
+  svg {
+    display: block;
+    width: 24px;
+    height: 24px;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    fill: none;
+  }
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.62);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #e4b85a;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #e4b85a;
+    outline-offset: 3px;
+  }
+}
+
 .menu-overlay-panel {
   position: relative;
   width: min(58vw, 720px);
@@ -67,7 +115,7 @@
 
 .menu-overlay-brand {
   position: absolute;
-  right: clamp(24px, 4vw, 48px);
+  right: var(--menu-edge-inset-x);
   bottom: clamp(24px, 4vh, 40px);
   z-index: 1;
   pointer-events: none;
@@ -466,13 +514,25 @@
 }
 
 @media (max-width: 1024px) {
+  .site-menu {
+    --menu-edge-inset-x: 20px;
+    --menu-edge-inset-y-top: 22px;
+    --orbit-icon-size: 46px;
+  }
+
   .menu-overlay {
     align-items: flex-start;
     padding-top: 0;
   }
 
+  .menu-close {
+    svg {
+      width: 22px;
+      height: 22px;
+    }
+  }
+
   .menu-overlay-brand {
-    right: 20px;
     bottom: 24px;
   }
 
