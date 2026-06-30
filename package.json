@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run import-data && vite build",
+    "import-data": "node scripts/import-solar-data.mjs",
     "deploy": "gh-pages -d dist",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -13,7 +14,8 @@
   "dependencies": {
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

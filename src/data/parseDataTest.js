@@ -1,5 +1,7 @@
+import { DEFAULT_EMISSION_RATE_LB_PER_MWH } from './co2Emissions.js'
+
 const MONTH_ROW_RE = /^[A-Za-z]{3}-\d{2}$/
-const DEFAULT_EMISSION_RATE = 1.392345
+const DEFAULT_EMISSION_RATE = DEFAULT_EMISSION_RATE_LB_PER_MWH
 
 const SUMMARY_COLUMNS = new Set([
   'Month',
@@ -71,17 +73,38 @@ function parseMonthLabel(label) {
   return { year, month }
 }
 
-function extractEmissionRate(lines) {
-  for (const line of lines.slice(0, 5)) {
-    const values = splitCsvLine(line)
-    const rateIndex = values.findIndex((value) =>
-      value.includes('eGRID') && value.includes('lb/MWh'),
-    )
-    if (rateIndex === -1) continue
+function parseNumeric(value) {
+  if (value == null || value === '') return 0
+  const cleaned = String(value).replace(/[$,]/g, '').trim()
+  if (!cleaned || Number.isNaN(Number(cleaned))) return 0
+  return Number(cleaned)
+}
 
-    const rateValue = values[rateIndex + 1] ?? values.find((value) => /^\d+\.\d+$/.test(value.trim()))
-    const parsed = parseKwh(rateValue ?? '')
-    if (parsed > 0) return parsed
+function extractEmissionRate(lines) {
+  const headerLine = lines.find((line) => {
+    const values = splitCsvLine(line)
+    return values.some((value) => value.includes('eGRID') && value.includes('lb/MWh'))
+  })
+
+  if (!headerLine) {
+    return DEFAULT_EMISSION_RATE
+  }
+
+  const headers = splitCsvLine(headerLine)
+  const rateIndex = headers.findIndex(
+    (value) => value.includes('eGRID') && value.includes('lb/MWh'),
+  )
+
+  if (rateIndex === -1) {
+    return DEFAULT_EMISSION_RATE
+  }
+
+  for (const line of lines) {
+    const values = splitCsvLine(line)
+    const parsed = parseNumeric(values[rateIndex] ?? '')
+    if (parsed > 10) {
+      return parsed
+    }
   }
 
   return DEFAULT_EMISSION_RATE

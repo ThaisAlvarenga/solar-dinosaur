@@ -1,7 +1,8 @@
 import { parseCsv } from './parseCsv'
 import { parseDataTest } from './parseDataTest'
+import { loadSolarDataset } from './loadSolarData'
 
-/** Scene keys that load CSV data from public/data/{variant}.csv */
+/** Scene keys that load data from public/data/ */
 export const DATA_SCENES = ['energy', 'co2', 'saving']
 
 const csvCache = new Map()
@@ -44,7 +45,11 @@ export async function loadSceneCsv(variant) {
   }
 
   if (variant === 'co2') {
-    return loadDataTestDataset()
+    return loadSolarDataset()
+  }
+
+  if (variant === 'energy') {
+    return loadSolarDataset()
   }
 
   if (csvCache.has(variant)) {

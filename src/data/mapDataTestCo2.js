@@ -1,5 +1,4 @@
-/**
- * Map parsed DataTest rows to per-year building stats for the CO2 scene.
+import { calcCo2SavedLbs, DEFAULT_EMISSION_RATE_LB_PER_MWH } from './co2Emissions'
  * @param {ReturnType<import('./parseDataTest').parseDataTest>} dataset
  * @param {number} year
  */
@@ -38,7 +37,8 @@ export function mapDataTestCo2(dataset, year) {
 
   const buildingList = Array.from(byBuilding.values()).map((record) => ({
     ...record,
-    cumulativeCo2Lbs: (record.cumulativeKwh / 1000) * emissionRateLbPerMWh,
+    annualCo2Lbs: calcCo2SavedLbs(record.annualKwh, emissionRateLbPerMWh),
+    cumulativeCo2Lbs: calcCo2SavedLbs(record.cumulativeKwh, emissionRateLbPerMWh),
   }))
 
   return {
