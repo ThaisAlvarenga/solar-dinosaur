@@ -1,3 +1,5 @@
+import { getBuildingDisplayName } from './buildingRegistry.js'
+
 /**
  * Map parsed DataTest rows to per-year building stats for the CO2 scene.
  * @param {ReturnType<import('./parseDataTest').parseDataTest>} dataset
@@ -11,7 +13,7 @@ export function mapDataTestCo2(dataset, year) {
       building.id,
       {
         id: building.id,
-        name: building.name,
+        name: getBuildingDisplayName(building.id),
         annualKwh: 0,
         cumulativeKwh: 0,
         cumulativeCo2Lbs: 0,

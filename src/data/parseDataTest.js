@@ -1,3 +1,5 @@
+﻿import { getBuildingDisplayName, resolveBuildingId, slugifyBuildingName } from './buildingRegistry.js'
+
 const MONTH_ROW_RE = /^[A-Za-z]{3}-\d{2}$/
 const DEFAULT_EMISSION_RATE = 1.392345
 
@@ -13,13 +15,7 @@ const SUMMARY_COLUMNS = new Set([
  * Normalize a building name to a stable slug id.
  * @param {string} name
  */
-export function slugifyBuildingName(name) {
-  return name
-    .toLowerCase()
-    .replace(/neighbor-hood/g, 'neighborhood')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-}
+export { slugifyBuildingName } from './buildingRegistry.js'
 
 function splitCsvLine(line) {
   const values = []
@@ -114,8 +110,8 @@ export function parseDataTest(text) {
     if (!header || SUMMARY_COLUMNS.has(header)) return
     if (header.startsWith('eGRID')) return
 
-    const id = slugifyBuildingName(header)
-    buildingColumns.push({ id, name: header, columnIndex: index })
+    const id = resolveBuildingId(header)
+    buildingColumns.push({ id, name: getBuildingDisplayName(id), columnIndex: index })
   })
 
   const emissionRateLbPerMWh = extractEmissionRate(lines)

@@ -1,237 +1,306 @@
-// import * as THREE from 'three'
-// import { yearProgress } from '../constants/timeline'
-// import { addLights, createCamera, createRenderer } from './shared'
-
-// /**
-//  * Energy scene — left triptych panel.
-//  * Wired in App.jsx as: <ThreePanel variant="energy" year={year} />
-//  *
-//  * CSV file: public/data/energy.csv
-//  * Data mapping: src/data/mapYearData.js → mapEnergyYearData()
-//  */
-// export function createEnergyScene(initialYear) {
-//   const scene = new THREE.Scene()
-//   const camera = createCamera()
-//   const renderer = createRenderer()
-//   const state = { year: initialYear, data: {} }
-
-//   addLights(scene, 0xfff4e0)
-
-//   // PLEASE WORK HERE FOR ENERGY — build your Three.js visualization (meshes, materials, groups).
-//   const energyCoreMaterial = new THREE.MeshStandardMaterial({
-//     color: 0xffb347,
-//     emissive: 0xff6600,
-//     emissiveIntensity: 0.55,
-//     roughness: 0.35,
-//     metalness: 0.1,
-//   })
-
-//   const energyCore = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 1), energyCoreMaterial)
-//   scene.add(energyCore)
-
-//   const energyCoronaMaterial = new THREE.MeshBasicMaterial({
-//     color: 0xffaa33,
-//     transparent: true,
-//     opacity: 0.12,
-//   })
-
-//   const energyCorona = new THREE.Mesh(new THREE.SphereGeometry(1.45, 32, 32), energyCoronaMaterial)
-//   scene.add(energyCorona)
-
-//   const energyOrbitMaterial = new THREE.MeshStandardMaterial({
-//     color: 0xffd27f,
-//     emissive: 0xff9900,
-//     emissiveIntensity: 0.25,
-//   })
-
-//   const energyOrbit = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.03, 8, 64), energyOrbitMaterial)
-//   energyOrbit.rotation.x = Math.PI / 2.5
-//   scene.add(energyOrbit)
-
-//   // PLEASE WORK HERE FOR ENERGY — apply CSV data when the timeline year changes.
-//   // `data` is loaded from CSV via ThreePanel; `progress` is 0 (2021) → 1 (2026).
-//   // Demo below uses `progress` like the original scene — swap in `data` fields when ready.
-//   const applyYear = ({ year, data = {}, progress = yearProgress(year) }) => {
-//     state.year = year
-//     state.data = data
-
-//     const energyCoreScale = 0.82 + progress * 0.38
-//     energyCore.scale.setScalar(energyCoreScale)
-//     energyCoreMaterial.emissiveIntensity = 0.3 + progress * 0.55
-//     energyCoreMaterial.color.lerpColors(
-//       new THREE.Color(0xffa040),
-//       new THREE.Color(0xffdd55),
-//       progress,
-//     )
-
-//     energyCoronaMaterial.opacity = 0.06 + progress * 0.16
-//     const energyCoronaScale = 1.35 + progress * 0.35
-//     energyCorona.scale.setScalar(energyCoronaScale / 1.45)
-
-//     const energyOrbitScale = 1.55 + progress * 0.55
-//     energyOrbit.scale.set(energyOrbitScale / 1.8, energyOrbitScale / 1.8, 1)
-//     energyOrbitMaterial.emissiveIntensity = 0.15 + progress * 0.35
-//   }
-
-//   // PLEASE WORK HERE FOR ENERGY — per-frame animation (optional; can read state.data / state.year).
-//   const animate = () => {
-//     const speed = 1 + yearProgress(state.year) * 0.75
-
-//     energyCore.rotation.y += 0.008 * speed
-//     energyCore.rotation.x += 0.004 * speed
-//     energyCorona.rotation.y -= 0.003 * speed
-//     energyOrbit.rotation.z += 0.006 * speed
-//   }
-
-//   applyYear({ year: initialYear, data: {}, progress: yearProgress(initialYear) })
-
-//   return { scene, camera, renderer, animate, applyYear, objects: [energyCore, energyCorona, energyOrbit] }
-
-//   // return {
-//   //   scene,
-//   //   camera,
-//   //   renderer,
-//   //   animate,
-//   //   applyYear,
-//   //   objects: [energyCore, energyCorona, energyOrbit],
-//   // }
-// }
-
-//** DK VERSION */ 
-//**FYI I USED CLAUDE FOR THIS. This is exploration, I am still trying to get a hold of this. ALSO YOUR DOCUMENTATION IS FABULOUS */
 import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
+import { loadBuildingPositions } from '../data/mapLayout'
+import { applyCo2Camera, loadCo2Camera } from './co2Camera'
 import { addLights, createCamera, createRenderer } from './shared'
+import { createSunBuilding } from './createSunBuilding'
 
+const BUILDING_SCALE = 0.091
+/** Rotate map so county spread runs bottom-left → top-right on screen */
+const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
+
+const ENERGY_CORE = 0xffb347
+const ENERGY_EMISSIVE = 0xff6600
+const ENERGY_PARTICLE = 0xffcc66
+const ENERGY_ORBIT = 0xffd27f
+const ENERGY_PARTICLE_SIZE = 0.045
+const KWH_PER_PARTICLE = 2500
+
+function formatEnergyKwh(kwh) {
+  if (!kwh || kwh <= 0) {
+    return '0 kWh generated'
+  }
+
+  if (kwh >= 1_000_000) {
+    return `${(kwh / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} GWh generated`
+  }
+
+  if (kwh >= 1000) {
+    return `${(kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} MWh generated`
+  }
+
+  return `${Math.round(kwh).toLocaleString()} kWh generated`
+}
+
+function kWhToParticleCount(kwh, maxParticles = 80) {
+  if (kwh <= 0) return 0
+  return Math.min(maxParticles, Math.max(4, Math.round(kwh / KWH_PER_PARTICLE)))
+}
+
+function fitTopDownCamera(camera, bounds, margin = 1.22) {
+  const width = bounds.xMax - bounds.xMin
+  const depth = bounds.zMax - bounds.zMin
+  const span = Math.max(width, depth) * margin
+  const fovRad = (camera.fov * Math.PI) / 180
+  const height = (span / 2) / Math.tan(fovRad / 2)
+
+  camera.position.set(0, height, 0)
+  camera.up.set(0, 0, -1)
+  camera.lookAt(0, 0, 0)
+  camera.updateProjectionMatrix()
+}
+
+/**
+ * Energy scene — left triptych panel.
+ * Building map driven by solar-data.xlsx via mapEnergyYearData().
+ */
 export function createEnergyScene(initialYear) {
   const scene = new THREE.Scene()
   const camera = createCamera()
   const renderer = createRenderer()
-  const state = { year: initialYear, data: {}, clock: new THREE.Clock() }
-
-  addLights(scene, 0xfff4e0)
-
-  // --- Core icosahedron ---
-  const energyCoreMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffb347,
-    emissive: 0xff6600,
-    emissiveIntensity: 0.55,
-    roughness: 0.35,
-    metalness: 0.1,
-  })
-  const energyCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 1), energyCoreMaterial)
-  scene.add(energyCore)
-
-  // --- Corona sphere ---
-  const energyCoronaMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffaa33,
-    transparent: true,
-    opacity: 0.12,
-  })
-  const energyCorona = new THREE.Mesh(new THREE.SphereGeometry(1.0, 15, 15), energyCoronaMaterial)
-  scene.add(energyCorona)
-
-  // --- Pulsating ring ---
-  const energyOrbitMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffd27f,
-    emissive: 0xff9900,
-    emissiveIntensity: 0.25,
-    transparent: true,   // needed for opacity pulsation
-    opacity: 1.0,
-  })
-  const energyOrbit = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.03, 8, 64), energyOrbitMaterial)
-  //energyOrbit.rotation.y = Math.PI / 2.5
-  energyOrbit.rotation.z = Math.PI / 2.5
-  scene.add(energyOrbit)
-
-  // Base scale set by applyYear; pulsation is additive on top in animate()
-  let orbitBaseScale = 1.0
-
-  // --- Particle system ---
-  const MAX_PARTICLES = 300
-  const particlePositions = new Float32Array(MAX_PARTICLES * 3)
-
-  // Pre-build all positions in a spherical shell (r = 2.2–3.2)
-  for (let i = 0; i < MAX_PARTICLES; i++) {
-    const r = 2.2 + Math.random() * 1.0
-    const theta = Math.random() * Math.PI * 2
-    const phi = Math.acos(2 * Math.random() - 1)
-    particlePositions[i * 3]     = r * Math.sin(phi) * Math.cos(theta)
-    particlePositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta)
-    particlePositions[i * 3 + 2] = r * Math.cos(phi)
+  const state = {
+    year: initialYear,
+    data: { buildings: [] },
+    clock: new THREE.Clock(),
+    ready: false,
+    mapBounds: null,
   }
 
-  const particleGeometry = new THREE.BufferGeometry()
-  particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3))
-  // Start with 0 visible particles; applyYear will grow this
-  particleGeometry.setDrawRange(0, 0)
+  addLights(scene, 0xfff4e0)
+  const rim = new THREE.DirectionalLight(0xff9900, 0.35)
+  rim.position.set(-2, 4, 3)
+  scene.add(rim)
 
-  const particleMaterial = new THREE.PointsMaterial({
-    color: 0xffcc66,
-    size: 0.06,
-    transparent: true,
-    opacity: 0.75,
-    sizeAttenuation: true,
-  })
+  const mapGroup = new THREE.Group()
+  mapGroup.scale.x = -1
+  scene.add(mapGroup)
 
-  const particles = new THREE.Points(particleGeometry, particleMaterial)
-  scene.add(particles)
+  const buildingEntries = new Map()
+  const buildingObjects = []
+  let domElement = null
+  let labelEl = null
+  let hoveredId = null
 
-  // --- applyYear ---
+  const updateHoverLabel = () => {
+    if (!labelEl || !hoveredId) return
+
+    const entry = buildingEntries.get(hoveredId)
+    const stats = (state.data.buildings ?? []).find((building) => building.id === hoveredId)
+
+    labelEl.replaceChildren()
+
+    const nameEl = document.createElement('span')
+    nameEl.className = 'energy-building-label__name'
+    nameEl.textContent = entry?.name ?? ''
+    labelEl.append(nameEl)
+
+    const statEl = document.createElement('span')
+    statEl.className = 'energy-building-label__stat'
+    statEl.textContent = formatEnergyKwh(stats?.annualKwh ?? 0)
+    labelEl.append(statEl)
+
+    labelEl.hidden = false
+  }
+
+  const setHoveredBuilding = (id) => {
+    if (id === hoveredId) return
+    hoveredId = id
+
+    if (!labelEl) {
+      if (domElement) {
+        domElement.style.cursor = id ? 'pointer' : ''
+      }
+      return
+    }
+
+    if (id) {
+      updateHoverLabel()
+    } else {
+      labelEl.hidden = true
+    }
+
+    if (domElement) {
+      domElement.style.cursor = id ? 'pointer' : ''
+    }
+  }
+
+  const applyCameraSetup = async () => {
+    const saved = await loadCo2Camera()
+    if (saved) {
+      applyCo2Camera(camera, saved)
+      return
+    }
+
+    if (state.mapBounds) {
+      fitTopDownCamera(camera, state.mapBounds)
+    }
+  }
+
   const applyYear = ({ year, data = {}, progress = yearProgress(year) }) => {
     state.year = year
     state.data = data
 
-    // Core
-    const energyCoreScale = 0.82 + progress * 0.38
-    energyCore.scale.setScalar(energyCoreScale)
-    energyCoreMaterial.emissiveIntensity = 0.3 + progress * 0.55
-    energyCoreMaterial.color.lerpColors(
-      new THREE.Color(0xffa040),
-      new THREE.Color(0xffdd55),
-      progress,
+    if (!state.ready) {
+      return
+    }
+
+    const statsById = new Map((data.buildings ?? []).map((building) => [building.id, building]))
+    const maxAnnualKwh = Math.max(
+      1,
+      ...(data.buildings ?? []).filter((b) => b.active).map((b) => b.annualKwh),
     )
 
-    // Corona
-    energyCoronaMaterial.opacity = 0.06 + progress * 0.16
-    const energyCoronaScale = 1.35 + progress * 0.35
-    energyCorona.scale.setScalar(energyCoronaScale / 1.45)
+    buildingEntries.forEach((entry, id) => {
+      const stats = statsById.get(id)
+      const active = Boolean(stats?.active)
 
-    // Ring — store base scale; animate() adds pulsation on top
-    orbitBaseScale = (1.55 + progress * 0.55) / 1.8
-    energyOrbitMaterial.emissiveIntensity = 0.15 + progress * 0.35
+      entry.sun.group.visible = active
+      if (!active) return
 
-    // Particles — grow count with progress (data-driven quantity)
-    const visibleCount = Math.floor(progress * MAX_PARTICLES)
-    particleGeometry.setDrawRange(0, visibleCount)
+      entry.sun.setParticleCount(kWhToParticleCount(stats.annualKwh, 80))
+      entry.sun.setAnnualIntensity(stats.annualKwh, maxAnnualKwh)
+
+      const scaleBoost = 0.85 + Math.min(stats.annualKwh / maxAnnualKwh, 1) * 0.25
+      entry.sun.setScale(BUILDING_SCALE * scaleBoost)
+    })
+
+    mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
+
+    if (hoveredId) {
+      const hoveredStats = statsById.get(hoveredId)
+      if (!hoveredStats?.active) {
+        setHoveredBuilding(null)
+      } else {
+        updateHoverLabel()
+      }
+    }
   }
 
-  // --- animate (per-frame) ---
+  const initBuildings = async () => {
+    try {
+      const { buildings, bounds } = await loadBuildingPositions()
+      state.mapBounds = bounds
+
+      buildings.forEach((position) => {
+        const sun = createSunBuilding({
+          scale: BUILDING_SCALE,
+          maxParticles: 80,
+          coreColor: ENERGY_CORE,
+          emissiveColor: ENERGY_EMISSIVE,
+          particleColor: ENERGY_PARTICLE,
+          orbitColor: ENERGY_ORBIT,
+          particleSize: ENERGY_PARTICLE_SIZE,
+          ringFaceCamera: true,
+        })
+
+        sun.group.position.set(position.x, 0, position.z)
+        sun.group.visible = false
+        mapGroup.add(sun.group)
+
+        for (const mesh of [sun.core, sun.corona, sun.orbit]) {
+          mesh.userData.energyBuildingId = position.id
+        }
+
+        const pickTarget = new THREE.Mesh(
+          new THREE.SphereGeometry(1.15, 10, 10),
+          new THREE.MeshBasicMaterial({ visible: false, depthWrite: false }),
+        )
+        pickTarget.userData.energyBuildingId = position.id
+        sun.group.add(pickTarget)
+
+        buildingEntries.set(position.id, {
+          id: position.id,
+          name: position.name,
+          sun,
+          pickTarget,
+        })
+        buildingObjects.push(...sun.disposeTargets, pickTarget)
+      })
+
+      state.ready = true
+      applyYear({ year: state.year, data: state.data, progress: yearProgress(state.year) })
+    } catch (error) {
+      console.warn('[energyScene] Failed to load building positions', error)
+    }
+
+    try {
+      await applyCameraSetup()
+    } catch (error) {
+      console.warn('[energyScene] Failed to apply camera', error)
+    }
+  }
+
+  initBuildings()
+
+  const pointer = new THREE.Vector2()
+  const raycaster = new THREE.Raycaster()
+
+  const getPickables = () => {
+    const meshes = []
+    buildingEntries.forEach((entry) => {
+      if (!entry.sun.group.visible || !entry.pickTarget) return
+      meshes.push(entry.pickTarget)
+    })
+    return meshes
+  }
+
+  const onPointerMove = (event) => {
+    if (!domElement) return
+
+    const rect = domElement.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+    raycaster.setFromCamera(pointer, camera)
+    const hits = raycaster.intersectObjects(getPickables(), false)
+    const hitId = hits[0]?.object?.userData?.energyBuildingId ?? null
+    setHoveredBuilding(hitId)
+  }
+
+  const onPointerLeave = () => {
+    setHoveredBuilding(null)
+  }
+
+  const setupInteraction = (element) => {
+    domElement = element
+    const panel = element.parentElement
+    if (panel) {
+      labelEl = document.createElement('div')
+      labelEl.className = 'energy-building-label'
+      labelEl.hidden = true
+      panel.appendChild(labelEl)
+    }
+
+    element.addEventListener('pointermove', onPointerMove)
+    element.addEventListener('pointerleave', onPointerLeave)
+  }
+
+  const disposeInteraction = () => {
+    if (domElement) {
+      domElement.removeEventListener('pointermove', onPointerMove)
+      domElement.removeEventListener('pointerleave', onPointerLeave)
+      domElement.style.cursor = ''
+      domElement = null
+    }
+
+    labelEl?.remove()
+    labelEl = null
+    hoveredId = null
+  }
+
   const animate = () => {
     const t = state.clock.getElapsedTime()
-    const speed = 1 + yearProgress(state.year) * 0.75
+    const speed = 1 + yearProgress(state.year) * 0.5
 
-    // Core rotation
-    energyCore.rotation.y += 0.008 * speed
-    energyCore.rotation.x += 0.004 * speed
-    energyCorona.rotation.y -= 0.003 * speed
-
-    // Ring: slow axial rotation + pulsation
-    energyOrbit.rotation.z += 0.006 * speed
-
-    // Pulsation: sine wave on a ~2 s period
-    const pulse = Math.sin(t * Math.PI)          // 0 → 1 → 0, period = 2 s
-    const pulseScale = orbitBaseScale + pulse * 0.18
-    energyOrbit.scale.set(pulseScale, pulseScale, 1)
-    // Opacity: full at rest, fades as ring expands
-    energyOrbitMaterial.opacity = 1.0 - pulse * 0.85
-
-    // Particles: slow drift rotation
-    particles.rotation.y += 0.001 * speed
-    particles.rotation.x += 0.0005 * speed
+    buildingEntries.forEach((entry) => {
+      if (!entry.sun.group.visible) return
+      entry.sun.animate(t, speed)
+    })
   }
 
-  applyYear({ year: initialYear, data: {}, progress: yearProgress(initialYear) })
+  applyYear({ year: initialYear, data: { buildings: [] }, progress: yearProgress(initialYear) })
 
   return {
     scene,
@@ -239,6 +308,8 @@ export function createEnergyScene(initialYear) {
     renderer,
     animate,
     applyYear,
-    objects: [energyCore, energyCorona, energyOrbit, particles],
+    setupInteraction,
+    disposeInteraction,
+    objects: buildingObjects,
   }
 }
