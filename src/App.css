@@ -319,6 +319,10 @@
   right: 0.75rem;
   bottom: 0.75rem;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
   max-width: calc(100% - 1.5rem);
   padding: 0.35rem 0.65rem;
   border: 1px solid rgb(0 106 255 / 45%);
@@ -332,6 +336,16 @@
   text-align: right;
   pointer-events: none;
   backdrop-filter: blur(4px);
+}
+
+.co2-building-label__name {
+  color: #e8f2ff;
+}
+
+.co2-building-label__stat {
+  color: #4d94ff;
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
 }
 
 .ticks {

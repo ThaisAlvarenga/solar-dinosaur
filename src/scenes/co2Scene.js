@@ -15,6 +15,19 @@ const CO2_PARTICLE = 0x4d94ff
 const CO2_ORBIT = 0x3388ff
 const CO2_PARTICLE_SIZE = 0.045
 
+function formatCo2Saved(lbs) {
+  if (!lbs || lbs <= 0) {
+    return '0 lbs CO₂ saved'
+  }
+
+  if (lbs >= 2000) {
+    const tons = lbs / 2000
+    return `${tons.toLocaleString(undefined, { maximumFractionDigits: 1 })} tons CO₂ saved`
+  }
+
+  return `${Math.round(lbs).toLocaleString()} lbs CO₂ saved`
+}
+
 function fitTopDownCamera(camera, bounds, margin = 1.22) {
   const width = bounds.xMax - bounds.xMin
   const depth = bounds.zMax - bounds.zMin
@@ -56,6 +69,52 @@ export function createCo2Scene(initialYear) {
 
   const buildingEntries = new Map()
   const buildingObjects = []
+  let domElement = null
+  let labelEl = null
+  let hoveredId = null
+
+  const updateHoverLabel = () => {
+    if (!labelEl || !hoveredId) return
+
+    const entry = buildingEntries.get(hoveredId)
+    const stats = (state.data.buildings ?? []).find((building) => building.id === hoveredId)
+
+    labelEl.replaceChildren()
+
+    const nameEl = document.createElement('span')
+    nameEl.className = 'co2-building-label__name'
+    nameEl.textContent = entry?.name ?? ''
+    labelEl.append(nameEl)
+
+    const statEl = document.createElement('span')
+    statEl.className = 'co2-building-label__stat'
+    statEl.textContent = formatCo2Saved(stats?.cumulativeCo2Lbs ?? 0)
+    labelEl.append(statEl)
+
+    labelEl.hidden = false
+  }
+
+  const setHoveredBuilding = (id) => {
+    if (id === hoveredId) return
+    hoveredId = id
+
+    if (!labelEl) {
+      if (domElement) {
+        domElement.style.cursor = id ? 'pointer' : ''
+      }
+      return
+    }
+
+    if (id) {
+      updateHoverLabel()
+    } else {
+      labelEl.hidden = true
+    }
+
+    if (domElement) {
+      domElement.style.cursor = id ? 'pointer' : ''
+    }
+  }
 
   const applyCameraSetup = async () => {
     const saved = await loadCo2Camera()
@@ -98,6 +157,15 @@ export function createCo2Scene(initialYear) {
     })
 
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
+
+    if (hoveredId) {
+      const hoveredStats = statsById.get(hoveredId)
+      if (!hoveredStats?.active) {
+        setHoveredBuilding(null)
+      } else {
+        updateHoverLabel()
+      }
+    }
   }
 
   const initBuildings = async () => {
@@ -158,9 +226,6 @@ export function createCo2Scene(initialYear) {
 
   const pointer = new THREE.Vector2()
   const raycaster = new THREE.Raycaster()
-  let domElement = null
-  let labelEl = null
-  let hoveredId = null
 
   const getPickables = () => {
     const meshes = []
@@ -169,24 +234,6 @@ export function createCo2Scene(initialYear) {
       meshes.push(entry.pickTarget)
     })
     return meshes
-  }
-
-  const setHoveredBuilding = (id) => {
-    if (id === hoveredId) return
-    hoveredId = id
-
-    if (!labelEl) return
-    if (id) {
-      const entry = buildingEntries.get(id)
-      labelEl.textContent = entry?.name ?? ''
-      labelEl.hidden = false
-    } else {
-      labelEl.hidden = true
-    }
-
-    if (domElement) {
-      domElement.style.cursor = id ? 'pointer' : ''
-    }
   }
 
   const onPointerMove = (event) => {
