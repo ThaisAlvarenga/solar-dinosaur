@@ -18,18 +18,18 @@ const KWH_PER_PARTICLE = 2500
 
 function formatEnergyKwh(kwh) {
   if (!kwh || kwh <= 0) {
-    return '0 kWh generated'
+    return '0 kWh'
   }
 
   if (kwh >= 1_000_000) {
-    return `${(kwh / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} GWh generated`
+    return `${(kwh / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} GWh`
   }
 
   if (kwh >= 1000) {
-    return `${(kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} MWh generated`
+    return `${(kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} MWh`
   }
 
-  return `${Math.round(kwh).toLocaleString()} kWh generated`
+  return `${Math.round(kwh).toLocaleString()} kWh`
 }
 
 function kWhToParticleCount(kwh, maxParticles = 80) {
@@ -111,10 +111,10 @@ export function createEnergyScene(initialYear) {
     nameEl.textContent = entry?.name ?? ''
     labelEl.append(nameEl)
 
-    const yearEl = document.createElement('span')
-    yearEl.className = 'energy-building-label__year'
-    yearEl.textContent = String(state.year)
-    labelEl.append(yearEl)
+    // const yearEl = document.createElement('span')
+    // yearEl.className = 'energy-building-label__year'
+    // yearEl.textContent = String(state.year)
+    // labelEl.append(yearEl)
 
     const statEl = document.createElement('span')
     statEl.className = 'energy-building-label__stat'

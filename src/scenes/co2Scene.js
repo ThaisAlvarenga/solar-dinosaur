@@ -17,15 +17,15 @@ const CO2_PARTICLE_SIZE = 0.045
 
 function formatCo2Saved(lbs) {
   if (!lbs || lbs <= 0) {
-    return '0 lbs CO₂ saved'
+    return '0 lbs CO₂'
   }
 
   if (lbs >= 2000) {
     const tons = lbs / 2000
-    return `${tons.toLocaleString(undefined, { maximumFractionDigits: 1 })} tons CO₂ saved`
+    return `${tons.toLocaleString(undefined, { maximumFractionDigits: 1 })} tons CO₂`
   }
 
-  return `${Math.round(lbs).toLocaleString()} lbs CO₂ saved`
+  return `${Math.round(lbs).toLocaleString()} lbs CO₂`
 }
 
 function fitTopDownCamera(camera, bounds, margin = 1.22) {
@@ -103,10 +103,10 @@ export function createCo2Scene(initialYear) {
     nameEl.textContent = entry?.name ?? ''
     labelEl.append(nameEl)
 
-    const yearEl = document.createElement('span')
-    yearEl.className = 'co2-building-label__year'
-    yearEl.textContent = String(state.year)
-    labelEl.append(yearEl)
+    // const yearEl = document.createElement('span')
+    // yearEl.className = 'co2-building-label__year'
+    // yearEl.textContent = String(state.year)
+    // labelEl.append(yearEl)
 
     const statEl = document.createElement('span')
     statEl.className = 'co2-building-label__stat'

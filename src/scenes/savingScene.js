@@ -17,18 +17,18 @@ const DOLLARS_PER_PARTICLE = 75
 
 function formatSavings(dollars) {
   if (!dollars || dollars <= 0) {
-    return '$0 saved'
+    return '$0'
   }
 
   if (dollars >= 1_000_000) {
-    return `$${(dollars / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M saved`
+    return `$${(dollars / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
   }
 
   if (dollars >= 1000) {
-    return `$${(dollars / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}K saved`
+    return `$${(dollars / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}K`
   }
 
-  return `$${Math.round(dollars).toLocaleString()} saved`
+  return `$${Math.round(dollars).toLocaleString()}`
 }
 
 function dollarsToParticleCount(dollars, maxParticles = 80) {
@@ -110,10 +110,10 @@ export function createSavingScene(initialYear) {
     nameEl.textContent = entry?.name ?? ''
     labelEl.append(nameEl)
 
-    const yearEl = document.createElement('span')
-    yearEl.className = 'saving-building-label__year'
-    yearEl.textContent = String(state.year)
-    labelEl.append(yearEl)
+    // const yearEl = document.createElement('span')
+    // yearEl.className = 'saving-building-label__year'
+    // yearEl.textContent = String(state.year)
+    // labelEl.append(yearEl)
 
     const statEl = document.createElement('span')
     statEl.className = 'saving-building-label__stat'
