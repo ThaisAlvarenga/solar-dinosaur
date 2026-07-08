@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { TIMELINE_YEARS } from '../constants/timeline'
 import ChromeCtaArrow from './ChromeCtaArrow'
+import BuildingsCount from './BuildingsCount'
 import './Timeline.css'
 
 const WHEEL_THRESHOLD = 90
@@ -104,6 +105,8 @@ export default function Timeline({
   useTimelineScrollCarousel({ year, onYearChange, enabled: scrollEnabled })
   return (
     <section className="timeline" aria-label="Year timeline">
+      <BuildingsCount year={year} />
+
       <div className="timeline-track">
         <div className="timeline-line" aria-hidden="true">
           <div
