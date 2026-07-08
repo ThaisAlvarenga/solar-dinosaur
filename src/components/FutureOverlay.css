@@ -5,12 +5,16 @@
   pointer-events: none;
   color: #fff;
   font-family: var(--heading);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .future-overlay button {
   pointer-events: auto;
   font-family: inherit;
   cursor: pointer;
+  margin-left: clamp(20px, 3vw, 40px);
 }
 
 .future-stats {
