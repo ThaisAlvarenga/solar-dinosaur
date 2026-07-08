@@ -64,7 +64,7 @@
 
 .site-footer {
   border-top: 1px solid var(--border);
-  padding: 24px 32px;
+  padding: 12px 32px;
   flex-shrink: 0;
 
   p {
@@ -74,7 +74,7 @@
   }
 
   @media (max-width: 1024px) {
-    padding: 20px;
+    padding: 10px 20px;
   }
 }
 
