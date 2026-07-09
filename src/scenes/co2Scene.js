@@ -3,17 +3,11 @@ import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
 import { addLights, createCamera, createRenderer, isBuildingActive } from './shared'
-import { createSunBuilding } from './createSunBuilding'
+import { Building } from '../components/building/index.js'
 
-const BUILDING_SCALE = 0.091
+const BUILDING_SCALE = 0.18
 /** Rotate map so county spread runs bottom-left → top-right on screen */
 const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
-
-const CO2_CORE = 0x006aff
-const CO2_EMISSIVE = 0x0047cc
-const CO2_PARTICLE = 0x4d94ff
-const CO2_ORBIT = 0x3388ff
-const CO2_PARTICLE_SIZE = 0.045
 
 function formatCo2Saved(lbs) {
   if (!lbs || lbs <= 0) {
@@ -178,17 +172,14 @@ export function createCo2Scene(initialYear) {
       const stats = statsById.get(id)
       const active = isBuildingActive(stats)
 
-      entry.sun.group.visible = active
-      if (!active) {
-        entry.sun.mapCo2ToParticles(0)
-        return
-      }
+      entry.building.group.visible = active
+      if (!active) return
 
-      entry.sun.mapCo2ToParticles(stats.cumulativeCo2Lbs)
-      entry.sun.setAnnualIntensity(stats.annualKwh, maxAnnualKwh)
+      const intensity = Math.min(stats.annualKwh / maxAnnualKwh, 1)
+      entry.building.speed = 1.2 + intensity * 0.8
 
-      const scaleBoost = 0.85 + Math.min(stats.annualKwh / maxAnnualKwh, 1) * 0.25
-      entry.sun.setScale(BUILDING_SCALE * scaleBoost)
+      const scaleBoost = 0.85 + intensity * 0.25
+      entry.building.setScale(BUILDING_SCALE * scaleBoost)
     })
 
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
@@ -213,22 +204,16 @@ export function createCo2Scene(initialYear) {
       state.mapBounds = bounds
 
       buildings.forEach((position) => {
-        const sun = createSunBuilding({
+        const building = new Building({
+          theme: 'co2',
+          position: { x: position.x, y: 0, z: position.z },
           scale: BUILDING_SCALE,
-          maxParticles: 80,
-          coreColor: CO2_CORE,
-          emissiveColor: CO2_EMISSIVE,
-          particleColor: CO2_PARTICLE,
-          orbitColor: CO2_ORBIT,
-          particleSize: CO2_PARTICLE_SIZE,
-          ringFaceCamera: true,
         })
 
-        sun.group.position.set(position.x, 0, position.z)
-        sun.group.visible = false
-        mapGroup.add(sun.group)
+        building.group.visible = false
+        mapGroup.add(building.group)
 
-        for (const mesh of [sun.core, sun.corona, sun.orbit]) {
+        for (const mesh of [building.sphere, building.ring1, building.ring2]) {
           mesh.userData.co2BuildingId = position.id
         }
 
@@ -237,15 +222,15 @@ export function createCo2Scene(initialYear) {
           new THREE.MeshBasicMaterial({ visible: false, depthWrite: false }),
         )
         pickTarget.userData.co2BuildingId = position.id
-        sun.group.add(pickTarget)
+        building.group.add(pickTarget)
 
         buildingEntries.set(position.id, {
           id: position.id,
           name: position.name,
-          sun,
+          building,
           pickTarget,
         })
-        buildingObjects.push(...sun.disposeTargets, pickTarget)
+        buildingObjects.push(building.group, pickTarget)
       })
 
       state.ready = true
@@ -275,7 +260,7 @@ export function createCo2Scene(initialYear) {
   const getPickables = () => {
     const meshes = []
     buildingEntries.forEach((entry) => {
-      if (!entry.sun.group.visible || !entry.pickTarget) return
+      if (!entry.building.group.visible || !entry.pickTarget) return
       meshes.push(entry.pickTarget)
     })
     return meshes
@@ -361,8 +346,8 @@ export function createCo2Scene(initialYear) {
     const speed = 1 + yearProgress(state.year) * 0.5
 
     buildingEntries.forEach((entry) => {
-      if (!entry.sun.group.visible) return
-      entry.sun.animate(t, speed)
+      if (!entry.building.group.visible) return
+      entry.building.update(t * speed)
     })
   }
 

@@ -3,17 +3,10 @@ import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
 import { addLights, createCamera, createRenderer, isBuildingActive } from './shared'
-import { createSunBuilding } from './createSunBuilding'
+import { Building } from '../components/building/index.js'
 
-const BUILDING_SCALE = 0.091
+const BUILDING_SCALE = 0.18
 const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
-
-const SAVING_CORE = 0x4ade80
-const SAVING_EMISSIVE = 0x166534
-const SAVING_PARTICLE = 0x86efac
-const SAVING_ORBIT = 0xbbf7d0
-const SAVING_PARTICLE_SIZE = 0.045
-const DOLLARS_PER_PARTICLE = 75
 
 function formatSavings(dollars) {
   if (!dollars || dollars <= 0) {
@@ -29,11 +22,6 @@ function formatSavings(dollars) {
   }
 
   return `$${Math.round(dollars).toLocaleString()}`
-}
-
-function dollarsToParticleCount(dollars, maxParticles = 80) {
-  if (dollars <= 0) return 0
-  return Math.min(maxParticles, Math.max(4, Math.round(dollars / DOLLARS_PER_PARTICLE)))
 }
 
 function fitTopDownCamera(camera, bounds, margin = 1.22) {
@@ -185,17 +173,14 @@ export function createSavingScene(initialYear) {
       const stats = statsById.get(id)
       const active = isBuildingActive(stats)
 
-      entry.sun.group.visible = active
-      if (!active) {
-        entry.sun.setParticleCount(0)
-        return
-      }
+      entry.building.group.visible = active
+      if (!active) return
 
-      entry.sun.setParticleCount(dollarsToParticleCount(stats.annualSavings, 80))
-      entry.sun.setAnnualIntensity(stats.annualSavings, maxAnnualSavings)
+      const intensity = Math.min(stats.annualSavings / maxAnnualSavings, 1)
+      entry.building.speed = 1.2 + intensity * 0.8
 
-      const scaleBoost = 0.85 + Math.min(stats.annualSavings / maxAnnualSavings, 1) * 0.25
-      entry.sun.setScale(BUILDING_SCALE * scaleBoost)
+      const scaleBoost = 0.85 + intensity * 0.25
+      entry.building.setScale(BUILDING_SCALE * scaleBoost)
     })
 
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
@@ -220,22 +205,16 @@ export function createSavingScene(initialYear) {
       state.mapBounds = bounds
 
       buildings.forEach((position) => {
-        const sun = createSunBuilding({
+        const building = new Building({
+          theme: 'savings',
+          position: { x: position.x, y: 0, z: position.z },
           scale: BUILDING_SCALE,
-          maxParticles: 80,
-          coreColor: SAVING_CORE,
-          emissiveColor: SAVING_EMISSIVE,
-          particleColor: SAVING_PARTICLE,
-          orbitColor: SAVING_ORBIT,
-          particleSize: SAVING_PARTICLE_SIZE,
-          ringFaceCamera: true,
         })
 
-        sun.group.position.set(position.x, 0, position.z)
-        sun.group.visible = false
-        mapGroup.add(sun.group)
+        building.group.visible = false
+        mapGroup.add(building.group)
 
-        for (const mesh of [sun.core, sun.corona, sun.orbit]) {
+        for (const mesh of [building.sphere, building.ring1, building.ring2]) {
           mesh.userData.savingBuildingId = position.id
         }
 
@@ -244,15 +223,15 @@ export function createSavingScene(initialYear) {
           new THREE.MeshBasicMaterial({ visible: false, depthWrite: false }),
         )
         pickTarget.userData.savingBuildingId = position.id
-        sun.group.add(pickTarget)
+        building.group.add(pickTarget)
 
         buildingEntries.set(position.id, {
           id: position.id,
           name: position.name,
-          sun,
+          building,
           pickTarget,
         })
-        buildingObjects.push(...sun.disposeTargets, pickTarget)
+        buildingObjects.push(building.group, pickTarget)
       })
 
       state.ready = true
@@ -282,7 +261,7 @@ export function createSavingScene(initialYear) {
   const getPickables = () => {
     const meshes = []
     buildingEntries.forEach((entry) => {
-      if (!entry.sun.group.visible || !entry.pickTarget) return
+      if (!entry.building.group.visible || !entry.pickTarget) return
       meshes.push(entry.pickTarget)
     })
     return meshes
@@ -368,8 +347,8 @@ export function createSavingScene(initialYear) {
     const speed = 1 + yearProgress(state.year) * 0.5
 
     buildingEntries.forEach((entry) => {
-      if (!entry.sun.group.visible) return
-      entry.sun.animate(t, speed)
+      if (!entry.building.group.visible) return
+      entry.building.update(t * speed)
     })
   }
 

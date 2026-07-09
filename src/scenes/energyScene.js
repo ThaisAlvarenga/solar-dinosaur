@@ -3,18 +3,11 @@ import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
 import { addLights, createCamera, createRenderer, isBuildingActive } from './shared'
-import { createSunBuilding } from './createSunBuilding'
+import { Building } from '../components/building/index.js'
 
-const BUILDING_SCALE = 0.091
+const BUILDING_SCALE = 0.18
 /** Rotate map so county spread runs bottom-left → top-right on screen */
 const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
-
-const ENERGY_CORE = 0xffb347
-const ENERGY_EMISSIVE = 0xff6600
-const ENERGY_PARTICLE = 0xffcc66
-const ENERGY_ORBIT = 0xffd27f
-const ENERGY_PARTICLE_SIZE = 0.045
-const KWH_PER_PARTICLE = 2500
 
 function formatEnergyKwh(kwh) {
   if (!kwh || kwh <= 0) {
@@ -30,11 +23,6 @@ function formatEnergyKwh(kwh) {
   }
 
   return `${Math.round(kwh).toLocaleString()} kWh`
-}
-
-function kWhToParticleCount(kwh, maxParticles = 80) {
-  if (kwh <= 0) return 0
-  return Math.min(maxParticles, Math.max(4, Math.round(kwh / KWH_PER_PARTICLE)))
 }
 
 function fitTopDownCamera(camera, bounds, margin = 1.22) {
@@ -186,17 +174,14 @@ export function createEnergyScene(initialYear) {
       const stats = statsById.get(id)
       const active = isBuildingActive(stats)
 
-      entry.sun.group.visible = active
-      if (!active) {
-        entry.sun.setParticleCount(0)
-        return
-      }
+      entry.building.group.visible = active
+      if (!active) return
 
-      entry.sun.setParticleCount(kWhToParticleCount(stats.annualKwh, 80))
-      entry.sun.setAnnualIntensity(stats.annualKwh, maxAnnualKwh)
+      const intensity = Math.min(stats.annualKwh / maxAnnualKwh, 1)
+      entry.building.speed = 1.2 + intensity * 0.8
 
-      const scaleBoost = 0.85 + Math.min(stats.annualKwh / maxAnnualKwh, 1) * 0.25
-      entry.sun.setScale(BUILDING_SCALE * scaleBoost)
+      const scaleBoost = 0.85 + intensity * 0.25
+      entry.building.setScale(BUILDING_SCALE * scaleBoost)
     })
 
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
@@ -221,22 +206,16 @@ export function createEnergyScene(initialYear) {
       state.mapBounds = bounds
 
       buildings.forEach((position) => {
-        const sun = createSunBuilding({
+        const building = new Building({
+          theme: 'energy',
+          position: { x: position.x, y: 0, z: position.z },
           scale: BUILDING_SCALE,
-          maxParticles: 80,
-          coreColor: ENERGY_CORE,
-          emissiveColor: ENERGY_EMISSIVE,
-          particleColor: ENERGY_PARTICLE,
-          orbitColor: ENERGY_ORBIT,
-          particleSize: ENERGY_PARTICLE_SIZE,
-          ringFaceCamera: true,
         })
 
-        sun.group.position.set(position.x, 0, position.z)
-        sun.group.visible = false
-        mapGroup.add(sun.group)
+        building.group.visible = false
+        mapGroup.add(building.group)
 
-        for (const mesh of [sun.core, sun.corona, sun.orbit]) {
+        for (const mesh of [building.sphere, building.ring1, building.ring2]) {
           mesh.userData.energyBuildingId = position.id
         }
 
@@ -245,15 +224,15 @@ export function createEnergyScene(initialYear) {
           new THREE.MeshBasicMaterial({ visible: false, depthWrite: false }),
         )
         pickTarget.userData.energyBuildingId = position.id
-        sun.group.add(pickTarget)
+        building.group.add(pickTarget)
 
         buildingEntries.set(position.id, {
           id: position.id,
           name: position.name,
-          sun,
+          building,
           pickTarget,
         })
-        buildingObjects.push(...sun.disposeTargets, pickTarget)
+        buildingObjects.push(building.group, pickTarget)
       })
 
       state.ready = true
@@ -283,7 +262,7 @@ export function createEnergyScene(initialYear) {
   const getPickables = () => {
     const meshes = []
     buildingEntries.forEach((entry) => {
-      if (!entry.sun.group.visible || !entry.pickTarget) return
+      if (!entry.building.group.visible || !entry.pickTarget) return
       meshes.push(entry.pickTarget)
     })
     return meshes
@@ -369,8 +348,8 @@ export function createEnergyScene(initialYear) {
     const speed = 1 + yearProgress(state.year) * 0.5
 
     buildingEntries.forEach((entry) => {
-      if (!entry.sun.group.visible) return
-      entry.sun.animate(t, speed)
+      if (!entry.building.group.visible) return
+      entry.building.update(t * speed)
     })
   }
 
