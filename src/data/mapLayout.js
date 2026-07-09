@@ -3,6 +3,23 @@ const WORLD_WIDTH = 5.5
 const MIN_ALPHA = 24
 const WHITE_CHANNEL_MIN = 238
 
+/** Building footprint at max scale — sphere diameter + small gap (rings may barely touch). */
+const BUILDING_SPHERE_RADIUS = 0.5
+const BUILDING_MAX_SCALE = 0.5
+const BUILDING_SEPARATION_PADDING = 0.048
+const MIN_BUILDING_SEPARATION =
+  BUILDING_SPHERE_RADIUS * BUILDING_MAX_SCALE * 2 + BUILDING_SEPARATION_PADDING
+
+/** How far a marker may drift from its mapped location while resolving overlap. */
+const MAX_DRIFT_X = 0.14
+const MAX_DRIFT_Z = 0.09
+const SEPARATION_RADIUS_X = MIN_BUILDING_SEPARATION * 1.15
+const SEPARATION_RADIUS_Z = MIN_BUILDING_SEPARATION * 0.82
+const HORIZONTAL_PUSH_SCALE = 1.2
+const VERTICAL_PUSH_SCALE = 0.75
+const SEPARATION_STRENGTH = 0.36
+const SEPARATION_ITERATIONS = 28
+
 let maskState = null
 
 function isValidPlacementPixel(data, px, py, width) {
@@ -178,6 +195,81 @@ export function clampToMask(x, z, mask) {
 }
 
 /**
+ * Nudge overlapping buildings apart while staying near their mapped locations.
+ * Positions are clamped to valid map pixels and limited drift from origin.
+ */
+function constrainDrift(point) {
+  const dx = point.x - point.originX
+  const dz = point.z - point.originZ
+  const norm = (dx / MAX_DRIFT_X) ** 2 + (dz / MAX_DRIFT_Z) ** 2
+
+  if (norm > 1) {
+    const scale = 1 / Math.sqrt(norm)
+    point.x = point.originX + dx * scale
+    point.z = point.originZ + dz * scale
+  }
+}
+
+function separateBuildingPositions(
+  buildings,
+  mask,
+  iterations = SEPARATION_ITERATIONS,
+) {
+  const points = buildings.map((building) => ({
+    x: building.x,
+    z: building.z,
+    originX: building.x,
+    originZ: building.z,
+  }))
+
+  for (let iter = 0; iter < iterations; iter += 1) {
+    let moved = false
+
+    for (let i = 0; i < points.length; i += 1) {
+      for (let j = i + 1; j < points.length; j += 1) {
+        let dx = points[j].x - points[i].x
+        let dz = points[j].z - points[i].z
+
+        if (dx === 0 && dz === 0) {
+          dx = 1e-4
+          dz = 2e-5
+        }
+
+        const normDistSq = (dx / SEPARATION_RADIUS_X) ** 2 + (dz / SEPARATION_RADIUS_Z) ** 2
+        if (normDistSq >= 1) continue
+
+        const dist = Math.hypot(dx, dz)
+        const push = (1 - Math.sqrt(normDistSq)) * 0.5 * SEPARATION_STRENGTH * MIN_BUILDING_SEPARATION
+        const nx = dx / dist
+        const nz = dz / dist
+
+        points[i].x -= nx * push * HORIZONTAL_PUSH_SCALE
+        points[i].z -= nz * push * VERTICAL_PUSH_SCALE
+        points[j].x += nx * push * HORIZONTAL_PUSH_SCALE
+        points[j].z += nz * push * VERTICAL_PUSH_SCALE
+        moved = true
+      }
+    }
+
+    for (let i = 0; i < points.length; i += 1) {
+      constrainDrift(points[i])
+      const clamped = clampToMask(points[i].x, points[i].z, mask)
+      points[i].x = clamped.x
+      points[i].z = clamped.z
+      constrainDrift(points[i])
+    }
+
+    if (!moved) break
+  }
+
+  return buildings.map((building, index) => ({
+    ...building,
+    x: points[index].x,
+    z: points[index].z,
+  }))
+}
+
+/**
  * @returns {Promise<{ bounds: object, aspect: number, buildings: Array }>}
  */
 export async function loadBuildingPositions() {
@@ -189,15 +281,18 @@ export async function loadBuildingPositions() {
   const payload = await response.json()
   const mask = await loadMapMask()
 
-  const buildings = payload.buildings.map((building) => {
-    if (typeof building.u === 'number' && typeof building.v === 'number') {
-      const scene = uvToScene(building.u, building.v, mask)
-      return { ...building, x: scene.x, z: scene.z }
-    }
+  const buildings = separateBuildingPositions(
+    payload.buildings.map((building) => {
+      if (typeof building.u === 'number' && typeof building.v === 'number') {
+        const scene = uvToScene(building.u, building.v, mask)
+        return { ...building, x: scene.x, z: scene.z }
+      }
 
-    const clamped = clampToMask(building.x, building.z, mask)
-    return { ...building, x: clamped.x, z: clamped.z }
-  })
+      const clamped = clampToMask(building.x, building.z, mask)
+      return { ...building, x: clamped.x, z: clamped.z }
+    }),
+    mask,
+  )
 
   return {
     bounds: mask.sceneBounds,

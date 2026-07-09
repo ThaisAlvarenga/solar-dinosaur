@@ -1,10 +1,22 @@
 import * as THREE from 'three'
 import { BUILDING_THEMES } from './themes.js'
 
-const MATCAP_SIZE = 512
+const MATCAP_SIZE = 256
+const SPHERE_SEGMENTS = 24
+const RING_TUBULAR = 16
+const RING_RADIAL = 32
 
 const ringTextureCache = new Map()
 const sharedTextureLoader = new THREE.TextureLoader()
+
+const sharedGeometries = {
+    sphere: new THREE.SphereGeometry(0.5, SPHERE_SEGMENTS, SPHERE_SEGMENTS),
+    ring1: new THREE.TorusGeometry(0.8, 0.02, RING_TUBULAR, RING_RADIAL),
+    ring2: new THREE.TorusGeometry(1, 0.005, RING_TUBULAR, RING_RADIAL),
+}
+
+/** One animated matcap canvas per theme — shared by all buildings in that theme. */
+const themeMatcapState = new Map()
 
 function hexToRgba(hex, alpha)
 {
@@ -39,15 +51,112 @@ function loadRingTexture(themeName)
     return ringTextureCache.get(themeName)
 }
 
+function ensureThemeMatcap(themeName)
+{
+    if (!themeMatcapState.has(themeName))
+    {
+        const canvas = document.createElement('canvas')
+        canvas.width = MATCAP_SIZE
+        canvas.height = MATCAP_SIZE
+        const ctx = canvas.getContext('2d')
+        const texture = new THREE.CanvasTexture(canvas)
+        texture.colorSpace = THREE.SRGBColorSpace
+
+        themeMatcapState.set(themeName, {
+            canvas,
+            ctx,
+            texture,
+            colors: { ...BUILDING_THEMES[themeName] },
+            speed: 1.5,
+        })
+
+        drawThemeMatcap(themeName, 0)
+    }
+
+    return themeMatcapState.get(themeName)
+}
+
+function drawThemeMatcap(themeName, time = 0)
+{
+    const state = themeMatcapState.get(themeName)
+    if (!state) return
+
+    const size = MATCAP_SIZE
+    const cx = size / 2
+    const cy = size / 2
+    const r = size / 2
+    const ctx = state.ctx
+    const colors = state.colors
+    const speed = state.speed
+
+    ctx.clearRect(0, 0, size, size)
+    ctx.fillStyle = colors.baseColor
+    ctx.fillRect(0, 0, size, size)
+
+    const t = time * speed
+    const driftA = { x: Math.sin(t) * size * 0.03, y: Math.cos(t * 0.8) * size * 0.2 }
+    const driftB = { x: Math.cos(t * 0.9) * size * 0.025, y: Math.sin(t * 1.1) * size * 0.2 }
+    const driftC = { x: Math.sin(t * 0.6) * size * 0.02, y: Math.cos(t * 0.7) * size * 0.1 }
+
+    drawBlob(
+        ctx,
+        cx - size * 0.05 + driftA.x, cy + size * 0.06 + driftA.y, size * 0.46,
+        hexToRgba(colors.shadowColor, 0.55), hexToRgba(colors.shadowColor, 0)
+    )
+
+    drawBlob(
+        ctx,
+        cx - size * 0.16 + driftB.x, cy + size * 0.02 + driftB.y, size * 0.30,
+        hexToRgba(colors.coreColor, 0.65), hexToRgba(colors.coreColor, 0)
+    )
+
+    drawBlob(
+        ctx,
+        cx + size * 0.02 + driftC.x, cy - size * 0.22 + driftC.y, size * 0.42,
+        hexToRgba(colors.highlightColor, 0.9), hexToRgba(colors.highlightColor, 0)
+    )
+
+    drawBlob(
+        ctx,
+        cx - size * 0.08 + driftC.x * 0.6, cy - size * 0.28 + driftC.y * 0.6, size * 0.14,
+        hexToRgba(colors.highlightColor, 0.95), hexToRgba(colors.highlightColor, 0)
+    )
+
+    drawBlob(
+        ctx,
+        cx + size * 0.30 - driftA.x, cy + size * 0.28 - driftA.y, size * 0.30,
+        'rgba(255, 255, 255, 0.35)', 'rgba(255, 255, 255, 0)'
+    )
+
+    const rimWidth = size * 0.02
+    const rimGradient = ctx.createRadialGradient(cx, cy, r - rimWidth * 2.2, cx, cy, r)
+    rimGradient.addColorStop(0, hexToRgba(colors.rimColor, 0))
+    rimGradient.addColorStop(0.65, hexToRgba(colors.rimColor, 0.55))
+    rimGradient.addColorStop(0.85, 'rgba(255, 255, 255, 0.95)')
+    rimGradient.addColorStop(1, hexToRgba(colors.rimColor, 0.15))
+    ctx.fillStyle = rimGradient
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+
+    state.texture.needsUpdate = true
+}
+
+/**
+ * Update the shared sphere matcap for a theme once per frame (not per building).
+ * @param {string} themeName
+ * @param {number} time
+ * @param {number} [speed=1.5]
+ */
+export function updateBuildingThemeMatcap(themeName, time, speed = 1.5)
+{
+    const state = ensureThemeMatcap(themeName)
+    state.speed = speed
+    drawThemeMatcap(themeName, time)
+}
+
 /**
  * Animated sphere + pulsing rings for Energy / CO2 / Savings scenes.
- *
- * @example
- * const building = new Building({ theme: 'energy', position: { x: 0, y: 0, z: 0 } })
- * scene.add(building.group)
- *
- * // In your animation loop:
- * buildings.forEach((building) => building.update(elapsedTime))
  */
 export class Building
 {
@@ -57,8 +166,6 @@ export class Building
             theme = 'energy',
             position = { x: 0, y: 0, z: 0 },
             scale = 1,
-            animate = true,
-            speed = 1.5,
             animateRings = true,
             ringDuration = 3,
             ringStagger = 1,
@@ -66,9 +173,6 @@ export class Building
         } = options
 
         this.themeName = theme
-        this.colors = { ...BUILDING_THEMES[theme] }
-        this.animate = animate
-        this.speed = speed
         this.animateRings = animateRings
         this.ringDuration = ringDuration
         this.ringStagger = ringStagger
@@ -78,27 +182,15 @@ export class Building
         this.group.position.set(position.x, position.y, position.z)
         this.group.scale.setScalar(scale)
 
-        this._createMatcapTexture()
-        this._createMeshes()
+        const themeMatcap = ensureThemeMatcap(theme)
+        this._createMeshes(themeMatcap.texture)
         this._applyThemeTextures()
-        this.updateMatcapTexture(0)
+        this.update(0)
     }
 
-    _createMatcapTexture()
+    _createMeshes(sphereMatcapTexture)
     {
-        this.matcapCanvas = document.createElement('canvas')
-        this.matcapCanvas.width = MATCAP_SIZE
-        this.matcapCanvas.height = MATCAP_SIZE
-        this.matcapCtx = this.matcapCanvas.getContext('2d')
-
-        this.matcapTexture = new THREE.CanvasTexture(this.matcapCanvas)
-        this.matcapTexture.colorSpace = THREE.SRGBColorSpace
-    }
-
-    _createMeshes()
-    {
-        this.sphereMaterial = new THREE.MeshMatcapMaterial()
-        this.sphereMaterial.matcap = this.matcapTexture
+        this.sphereMaterial = new THREE.MeshMatcapMaterial({ matcap: sphereMatcapTexture })
 
         this.ring1Material = new THREE.MeshMatcapMaterial()
         this.ring1Material.transparent = true
@@ -106,21 +198,12 @@ export class Building
 
         this.ring2Material = this.ring1Material.clone()
 
-        this.sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(0.5, 64, 64),
-            this.sphereMaterial
-        )
+        this.sphere = new THREE.Mesh(sharedGeometries.sphere, this.sphereMaterial)
 
-        this.ring1 = new THREE.Mesh(
-            new THREE.TorusGeometry(0.8, 0.02, 64, 128),
-            this.ring1Material
-        )
+        this.ring1 = new THREE.Mesh(sharedGeometries.ring1, this.ring1Material)
         this.ring1.rotation.x = Math.PI / 2
 
-        this.ring2 = new THREE.Mesh(
-            new THREE.TorusGeometry(1, 0.005, 64, 128),
-            this.ring2Material
-        )
+        this.ring2 = new THREE.Mesh(sharedGeometries.ring2, this.ring2Material)
         this.ring2.rotation.x = Math.PI / 2
 
         this.rings = [
@@ -146,9 +229,9 @@ export class Building
         }
 
         this.themeName = themeName
-        this.colors = { ...BUILDING_THEMES[themeName] }
+        const themeMatcap = ensureThemeMatcap(themeName)
+        this.sphereMaterial.matcap = themeMatcap.texture
         this._applyThemeTextures()
-        this.updateMatcapTexture(0)
     }
 
     setPosition(x, y, z)
@@ -159,68 +242,6 @@ export class Building
     setScale(scale)
     {
         this.group.scale.setScalar(scale)
-    }
-
-    updateMatcapTexture(time = 0)
-    {
-        const size = MATCAP_SIZE
-        const cx = size / 2
-        const cy = size / 2
-        const r = size / 2
-        const ctx = this.matcapCtx
-        const colors = this.colors
-
-        ctx.clearRect(0, 0, size, size)
-        ctx.fillStyle = colors.baseColor
-        ctx.fillRect(0, 0, size, size)
-
-        const t = time * this.speed
-        const driftA = { x: Math.sin(t) * size * 0.03, y: Math.cos(t * 0.8) * size * 0.2 }
-        const driftB = { x: Math.cos(t * 0.9) * size * 0.025, y: Math.sin(t * 1.1) * size * 0.2 }
-        const driftC = { x: Math.sin(t * 0.6) * size * 0.02, y: Math.cos(t * 0.7) * size * 0.1 }
-
-        drawBlob(
-            ctx,
-            cx - size * 0.05 + driftA.x, cy + size * 0.06 + driftA.y, size * 0.46,
-            hexToRgba(colors.shadowColor, 0.55), hexToRgba(colors.shadowColor, 0)
-        )
-
-        drawBlob(
-            ctx,
-            cx - size * 0.16 + driftB.x, cy + size * 0.02 + driftB.y, size * 0.30,
-            hexToRgba(colors.coreColor, 0.65), hexToRgba(colors.coreColor, 0)
-        )
-
-        drawBlob(
-            ctx,
-            cx + size * 0.02 + driftC.x, cy - size * 0.22 + driftC.y, size * 0.42,
-            hexToRgba(colors.highlightColor, 0.9), hexToRgba(colors.highlightColor, 0)
-        )
-
-        drawBlob(
-            ctx,
-            cx - size * 0.08 + driftC.x * 0.6, cy - size * 0.28 + driftC.y * 0.6, size * 0.14,
-            hexToRgba(colors.highlightColor, 0.95), hexToRgba(colors.highlightColor, 0)
-        )
-
-        drawBlob(
-            ctx,
-            cx + size * 0.30 - driftA.x, cy + size * 0.28 - driftA.y, size * 0.30,
-            'rgba(255, 255, 255, 0.35)', 'rgba(255, 255, 255, 0)'
-        )
-
-        const rimWidth = size * 0.02
-        const rimGradient = ctx.createRadialGradient(cx, cy, r - rimWidth * 2.2, cx, cy, r)
-        rimGradient.addColorStop(0, hexToRgba(colors.rimColor, 0))
-        rimGradient.addColorStop(0.65, hexToRgba(colors.rimColor, 0.55))
-        rimGradient.addColorStop(0.85, 'rgba(255, 255, 255, 0.95)')
-        rimGradient.addColorStop(1, hexToRgba(colors.rimColor, 0.15))
-        ctx.fillStyle = rimGradient
-        ctx.beginPath()
-        ctx.arc(cx, cy, r, 0, Math.PI * 2)
-        ctx.fill()
-
-        this.matcapTexture.needsUpdate = true
     }
 
     _updateRings(time)
@@ -237,13 +258,9 @@ export class Building
         })
     }
 
+    /** Per-building update — ring pulse only; matcap is updated via updateBuildingThemeMatcap(). */
     update(time)
     {
-        if (this.animate)
-        {
-            this.updateMatcapTexture(time)
-        }
-
         if (this.animateRings)
         {
             this._updateRings(time)
@@ -253,25 +270,12 @@ export class Building
     dispose()
     {
         this.group.remove(this.ring1, this.ring2, this.sphere)
-
-        this.sphere.geometry.dispose()
-        this.ring1.geometry.dispose()
-        this.ring2.geometry.dispose()
-
         this.sphereMaterial.dispose()
         this.ring1Material.dispose()
         this.ring2Material.dispose()
-        this.matcapTexture.dispose()
     }
 }
 
-/**
- * Build many buildings for one scene theme from data records.
- *
- * @param {Array<object>} records - Each record can include position, scale, and any custom fields.
- * @param {'energy'|'co2'|'savings'} theme
- * @param {(record: object, index: number) => object} [mapOptions] - Extra Building constructor options per record.
- */
 export function createBuildingArray(records, theme, mapOptions = () => ({}))
 {
     return records.map((record, index) =>

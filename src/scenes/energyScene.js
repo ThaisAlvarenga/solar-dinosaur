@@ -2,8 +2,8 @@ import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
-import { addLights, createCamera, createRenderer, isBuildingActive } from './shared'
-import { Building } from '../components/building/index.js'
+import { addLights, createCamera, createRenderer, fitTopDownCamera, isBuildingActive, activeMetricRange, scaleBuildingByMetric } from './shared'
+import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
 
 const BUILDING_SCALE = 0.18
 /** Rotate map so county spread runs bottom-left → top-right on screen */
@@ -23,19 +23,6 @@ function formatEnergyKwh(kwh) {
   }
 
   return `${Math.round(kwh).toLocaleString()} kWh`
-}
-
-function fitTopDownCamera(camera, bounds, margin = 1.22) {
-  const width = bounds.xMax - bounds.xMin
-  const depth = bounds.zMax - bounds.zMin
-  const span = Math.max(width, depth) * margin
-  const fovRad = (camera.fov * Math.PI) / 180
-  const height = (span / 2) / Math.tan(fovRad / 2)
-
-  camera.position.set(0, height, 0)
-  camera.up.set(0, 0, -1)
-  camera.lookAt(0, 0, 0)
-  camera.updateProjectionMatrix()
 }
 
 /**
@@ -61,6 +48,7 @@ export function createEnergyScene(initialYear) {
 
   const mapGroup = new THREE.Group()
   mapGroup.scale.x = -1
+  mapGroup.visible = false
   scene.add(mapGroup)
 
   const buildingEntries = new Map()
@@ -133,14 +121,13 @@ export function createEnergyScene(initialYear) {
   }
 
   const applyCameraSetup = async () => {
+    if (state.mapBounds) {
+      fitTopDownCamera(camera, state.mapBounds)
+    }
+
     const saved = await loadCo2Camera()
     if (saved) {
       applyCo2Camera(camera, saved)
-      return
-    }
-
-    if (state.mapBounds) {
-      fitTopDownCamera(camera, state.mapBounds)
     }
   }
 
@@ -165,10 +152,7 @@ export function createEnergyScene(initialYear) {
 
   const commitYear = ({ year, data = {}, progress = yearProgress(year) }) => {
     const statsById = new Map((data.buildings ?? []).map((building) => [building.id, building]))
-    const maxAnnualKwh = Math.max(
-      1,
-      ...(data.buildings ?? []).filter((b) => isBuildingActive(b)).map((b) => b.annualKwh),
-    )
+    const { min, max } = activeMetricRange(data.buildings, (building) => building.annualKwh)
 
     buildingEntries.forEach((entry, id) => {
       const stats = statsById.get(id)
@@ -177,11 +161,9 @@ export function createEnergyScene(initialYear) {
       entry.building.group.visible = active
       if (!active) return
 
-      const intensity = Math.min(stats.annualKwh / maxAnnualKwh, 1)
-      entry.building.speed = 1.2 + intensity * 0.8
-
-      const scaleBoost = 0.85 + intensity * 0.25
-      entry.building.setScale(BUILDING_SCALE * scaleBoost)
+      entry.building.setScale(
+        scaleBuildingByMetric(stats.annualKwh, min, max, BUILDING_SCALE),
+      )
     })
 
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
@@ -235,6 +217,8 @@ export function createEnergyScene(initialYear) {
         buildingObjects.push(building.group, pickTarget)
       })
 
+      await applyCameraSetup()
+
       state.ready = true
       commitYear(
         pendingYearPayload ?? {
@@ -243,14 +227,9 @@ export function createEnergyScene(initialYear) {
           progress: yearProgress(state.year),
         },
       )
+      mapGroup.visible = true
     } catch (error) {
       console.warn('[energyScene] Failed to load building positions', error)
-    }
-
-    try {
-      await applyCameraSetup()
-    } catch (error) {
-      console.warn('[energyScene] Failed to apply camera', error)
     }
   }
 
@@ -346,11 +325,19 @@ export function createEnergyScene(initialYear) {
   const animate = () => {
     const t = state.clock.getElapsedTime()
     const speed = 1 + yearProgress(state.year) * 0.5
+    const animationTime = t * speed
+
+    let visibleCount = 0
 
     buildingEntries.forEach((entry) => {
       if (!entry.building.group.visible) return
-      entry.building.update(t * speed)
+      visibleCount++
+      entry.building.update(animationTime)
     })
+
+    if (visibleCount > 0) {
+      updateBuildingThemeMatcap('energy', animationTime, 1.5 * speed)
+    }
   }
 
   applyYear({ year: initialYear, data: { buildings: [] }, progress: yearProgress(initialYear) })
