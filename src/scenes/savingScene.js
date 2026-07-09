@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
-import { addLights, createCamera, createRenderer, fitTopDownCamera, isBuildingActive, activeMetricRange, scaleBuildingByMetric } from './shared'
+import { getGlobalElapsedTime } from './sceneAnimation'
+import { addLights, createCamera, createRenderer, fitTopDownCamera, isBuildingActive, scaleBuildingByMetric, commitSceneBuildings } from './shared'
 import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
 
 const BUILDING_SCALE = 0.18
@@ -35,7 +36,6 @@ export function createSavingScene(initialYear) {
   const state = {
     year: initialYear,
     data: { buildings: [] },
-    clock: new THREE.Clock(),
     ready: false,
     mapBounds: null,
   }
@@ -57,6 +57,7 @@ export function createSavingScene(initialYear) {
   let hoveredId = null
   let selectedId = null
   let pendingYearPayload = null
+  let activeBuildingIds = new Set()
 
   const getFocusedBuildingId = () => selectedId ?? hoveredId
 
@@ -151,19 +152,20 @@ export function createSavingScene(initialYear) {
 
   const commitYear = ({ year, data = {}, progress = yearProgress(year) }) => {
     const statsById = new Map((data.buildings ?? []).map((building) => [building.id, building]))
-    const { min, max } = activeMetricRange(data.buildings, (building) => building.annualSavings)
+    const transitionTime = getGlobalElapsedTime()
 
-    buildingEntries.forEach((entry, id) => {
-      const stats = statsById.get(id)
-      const active = isBuildingActive(stats)
-
-      entry.building.group.visible = active
-      if (!active) return
-
-      entry.building.setScale(
-        scaleBuildingByMetric(stats.annualSavings, min, max, BUILDING_SCALE),
-      )
-    })
+    activeBuildingIds = commitSceneBuildings(
+      buildingEntries,
+      statsById,
+      year,
+      {
+        animationTime: transitionTime,
+        buildingsList: data.buildings ?? [],
+        getMetricValue: (building) => building.annualSavings,
+        getScale: (stats, min, max) =>
+          scaleBuildingByMetric(stats.annualSavings, min, max, BUILDING_SCALE),
+      },
+    )
 
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
     syncFocusAfterYear(statsById)
@@ -322,16 +324,16 @@ export function createSavingScene(initialYear) {
   }
 
   const animate = () => {
-    const t = state.clock.getElapsedTime()
     const speed = 1 + yearProgress(state.year) * 0.5
-    const animationTime = t * speed
+    const animationTime = getGlobalElapsedTime() * speed
+    const transitionTime = getGlobalElapsedTime()
 
     let visibleCount = 0
 
     buildingEntries.forEach((entry) => {
-      if (!entry.building.group.visible) return
+      if (!entry.building.shouldRender()) return
       visibleCount++
-      entry.building.update(animationTime)
+      entry.building.update(animationTime, transitionTime)
     })
 
     if (visibleCount > 0) {

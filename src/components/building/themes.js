@@ -26,6 +26,14 @@ export const BUILDING_THEMES = {
         highlightColor: '#dbffdb',
         rimColor: '#00ff00',
         ringTexture: '/assets/matcaps/MoneyRing.png'
+    },
+    neutral: {
+        baseColor: '#7a7a7a70',
+        shadowColor: '#3d3d3d',
+        coreColor: '#5c5c5c',
+        highlightColor: '#b8b8b8',
+        rimColor: '#909090',
+        ringTexture: '/assets/matcaps/EnergyRIng.png'
     }
 }
 

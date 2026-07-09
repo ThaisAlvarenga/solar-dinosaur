@@ -15,6 +15,10 @@ const sharedGeometries = {
     ring2: new THREE.TorusGeometry(1, 0.005, RING_TUBULAR, RING_RADIAL),
 }
 
+const ENTRANCE_DURATION = 1.25
+const ENTRANCE_FLOAT_HEIGHT = 0.14
+const ENTRANCE_STAGGER = 0.07
+
 /** One animated matcap canvas per theme — shared by all buildings in that theme. */
 const themeMatcapState = new Map()
 
@@ -177,6 +181,14 @@ export class Building
         this.ringDuration = ringDuration
         this.ringStagger = ringStagger
         this.data = data
+        this.displayOpacity = 1
+        this.exitStartOpacity = 1
+        this.transitionMode = null
+        this.transitionStartTime = 0
+        this.transitionDuration = ENTRANCE_DURATION
+        this.floatHeight = ENTRANCE_FLOAT_HEIGHT
+        this.targetX = position.x
+        this.targetZ = position.z
 
         this.group = new THREE.Group()
         this.group.position.set(position.x, position.y, position.z)
@@ -190,7 +202,11 @@ export class Building
 
     _createMeshes(sphereMatcapTexture)
     {
-        this.sphereMaterial = new THREE.MeshMatcapMaterial({ matcap: sphereMatcapTexture })
+        this.sphereMaterial = new THREE.MeshMatcapMaterial({
+            matcap: sphereMatcapTexture,
+            transparent: true,
+            opacity: 0,
+        })
 
         this.ring1Material = new THREE.MeshMatcapMaterial()
         this.ring1Material.transparent = true
@@ -244,6 +260,108 @@ export class Building
         this.group.scale.setScalar(scale)
     }
 
+    setDisplayOpacity(opacity)
+    {
+        this.displayOpacity = opacity
+        this.sphereMaterial.opacity = opacity
+    }
+
+    isTransitioning()
+    {
+        return this.transitionMode !== null
+    }
+
+    hideImmediate()
+    {
+        this.transitionMode = null
+        this.group.visible = false
+        this.group.position.y = 0
+        this.setDisplayOpacity(0)
+    }
+
+    settledVisible()
+    {
+        this.transitionMode = null
+        this.group.visible = true
+        this.group.position.y = 0
+        this.setDisplayOpacity(1)
+    }
+
+    syncToTransition(transition, currentTime, options = {})
+    {
+        if (!transition) return
+
+        this.transitionMode = transition.type
+        this.transitionStartTime = transition.startTime
+        this.targetX = this.group.position.x
+        this.targetZ = this.group.position.z
+        this.group.visible = true
+
+        if (transition.type === 'exit' && !options.continueExit)
+        {
+            this.exitStartOpacity = this.displayOpacity > 0 ? this.displayOpacity : 1
+        }
+
+        this.applyTransitionState(currentTime)
+    }
+
+    applyTransitionState(time)
+    {
+        if (!this.transitionMode) return
+
+        const elapsed = time - this.transitionStartTime
+
+        if (elapsed < 0)
+        {
+            if (this.transitionMode === 'enter')
+            {
+                this.group.position.y = -this.floatHeight
+                this.setDisplayOpacity(0)
+            }
+            else
+            {
+                this.group.position.y = 0
+                this.setDisplayOpacity(0)
+            }
+            return
+        }
+
+        const t = Math.min(1, elapsed / this.transitionDuration)
+        const eased = 1 - Math.pow(1 - t, 3)
+
+        this.group.position.x = this.targetX
+        this.group.position.z = this.targetZ
+
+        if (this.transitionMode === 'enter')
+        {
+            this.group.position.y = -this.floatHeight * (1 - eased)
+            this.setDisplayOpacity(eased)
+        }
+        else
+        {
+            this.group.position.y = -this.floatHeight * eased
+            this.setDisplayOpacity(this.exitStartOpacity * (1 - eased))
+        }
+
+        if (t >= 1)
+        {
+            if (this.transitionMode === 'enter')
+            {
+                this.settledVisible()
+            }
+            else
+            {
+                this.hideImmediate()
+            }
+        }
+    }
+
+    /** @returns {boolean} whether this building should keep animating/rendering */
+    shouldRender()
+    {
+        return this.group.visible || this.isTransitioning()
+    }
+
     _updateRings(time)
     {
         const cycle = Math.max(this.ringDuration, 0.001)
@@ -254,14 +372,19 @@ export class Building
             const t = localTime / cycle
             const scaleT = 1 - Math.pow(1 - t, 3)
             ring.mesh.scale.setScalar(scaleT)
-            ring.material.opacity = Math.sin(Math.PI * t)
+            ring.material.opacity = Math.sin(Math.PI * t) * this.displayOpacity
         })
     }
 
-    /** Per-building update — ring pulse only; matcap is updated via updateBuildingThemeMatcap(). */
-    update(time)
+    /** Per-building update — fade/float transitions + ring pulse. */
+    update(time, transitionTime = time)
     {
-        if (this.animateRings)
+        if (this.transitionMode)
+        {
+            this.applyTransitionState(transitionTime)
+        }
+
+        if (this.animateRings && this.group.visible)
         {
             this._updateRings(time)
         }

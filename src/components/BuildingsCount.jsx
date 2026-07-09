@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadSolarDataset, mapEnergyYearData } from '../data'
+import { StaticBuildingIcon } from './building'
 import './BuildingsCount.css'
 
 export default function BuildingsCount({ year, label = 'Buildings wth Solar Panels' }) {
@@ -33,7 +34,7 @@ export default function BuildingsCount({ year, label = 'Buildings wth Solar Pane
     <div className="buildings-count" aria-label="Buildings with solar panels">
       <div className="buildings-count__top">
         <div className="buildings-count__value">{count}</div>
-        <span className="buildings-count__dot" aria-hidden="true" />
+        <StaticBuildingIcon className="buildings-count__icon" />
       </div>
       <div className="buildings-count__label">{label}</div>
     </div>

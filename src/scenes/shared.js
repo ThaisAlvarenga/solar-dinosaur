@@ -1,4 +1,11 @@
 import * as THREE from 'three'
+import {
+  beginBuildingCommitForYear,
+  clearTransition,
+  finishBuildingCommitForYear,
+  getTransition,
+  registerTransition,
+} from './sceneAnimation.js'
 
 export function createRenderer() {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -74,6 +81,88 @@ export function scaleBuildingByMetric(value, minValue, maxValue, baseScale, maxS
 
   const t = Math.min(1, Math.max(0, (value - minValue) / (maxValue - minValue)))
   return baseScale + t * (maxScale - baseScale)
+}
+
+/**
+ * Update building visibility/scale for a timeline year.
+ * Enter/exit timing is shared across scene panels via sceneAnimation.js.
+ */
+export function commitSceneBuildings(
+  buildingEntries,
+  statsById,
+  year,
+  { animationTime, buildingsList, getMetricValue, getScale },
+) {
+  const { min, max } = activeMetricRange(buildingsList, getMetricValue)
+  const previousActiveIds = beginBuildingCommitForYear(year)
+  const nextActiveIds = new Set()
+  let enterStagger = 0
+
+  buildingEntries.forEach((entry, id) => {
+    const stats = statsById.get(id)
+    const wasActive = previousActiveIds.has(id)
+    const isActive = isBuildingActive(stats)
+
+    if (!isActive) {
+      const transition = getTransition(id)
+      const isExiting =
+        entry.building.isTransitioning() && entry.building.transitionMode === 'exit'
+      const isEntering =
+        entry.building.isTransitioning() && entry.building.transitionMode === 'enter'
+      const globalExit = transition?.type === 'exit'
+
+      // Never restart a fade-out — continue from the shared transition clock.
+      if (isExiting || globalExit) {
+        if (transition) {
+          entry.building.syncToTransition(transition, animationTime, { continueExit: true })
+          if (!entry.building.shouldRender()) {
+            clearTransition(id)
+          }
+        } else {
+          entry.building.applyTransitionState(animationTime)
+        }
+        return
+      }
+
+      if (wasActive || isEntering) {
+        const exitTransition = registerTransition(id, 'exit', animationTime, 0, true)
+        entry.building.syncToTransition(exitTransition, animationTime)
+        return
+      }
+
+      entry.building.hideImmediate()
+      clearTransition(id)
+      return
+    }
+
+    nextActiveIds.add(id)
+    entry.building.setScale(getScale(stats, min, max))
+
+    if (!wasActive) {
+      const transition = registerTransition(id, 'enter', animationTime, enterStagger, true)
+      enterStagger += 1
+      entry.building.syncToTransition(transition, animationTime)
+      return
+    }
+
+    const transition = getTransition(id)
+    if (transition?.type === 'enter' && entry.building.isTransitioning()) {
+      entry.building.syncToTransition(transition, animationTime)
+      return
+    }
+
+    if (entry.building.isTransitioning() && entry.building.transitionMode === 'exit') {
+      const enterTransition = registerTransition(id, 'enter', animationTime, 0, true)
+      entry.building.syncToTransition(enterTransition, animationTime)
+      return
+    }
+
+    entry.building.settledVisible()
+    clearTransition(id)
+  })
+
+  finishBuildingCommitForYear(nextActiveIds)
+  return nextActiveIds
 }
 
 /**

@@ -22,20 +22,8 @@
   line-height: normal;
 }
 
-.buildings-count__dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 1.5px solid rgba(255, 175, 70, 0.55);
-  background: radial-gradient(
-    circle at 35% 35%,
-    rgba(255, 245, 157, 0.92) 0%,
-    rgba(255, 213, 74, 0.62) 45%,
-    rgba(255, 179, 0, 0.18) 100%
-  );
-  box-shadow:
-    0 0 8px rgba(255, 213, 74, 0.18),
-    0 0 18px rgba(255, 193, 7, 0.12);
+.buildings-count__icon {
+  margin-top: 4px;
 }
 
 .buildings-count__label {
@@ -51,10 +39,5 @@
 @media (max-width: 1024px) {
   .buildings-count__value {
     font-size: 56px;
-  }
-
-  .buildings-count__dot {
-    width: 18px;
-    height: 18px;
   }
 }
