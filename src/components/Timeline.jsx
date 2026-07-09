@@ -2,20 +2,12 @@ import { useEffect, useRef } from 'react'
 import { TIMELINE_YEARS } from '../constants/timeline'
 import ChromeCtaArrow from './ChromeCtaArrow'
 import BuildingsCount from './BuildingsCount'
+import TimelineYearStrip from './TimelineYearStrip'
 import './Timeline.css'
 
 const WHEEL_THRESHOLD = 90
 const WHEEL_COOLDOWN_MS = 420
 const SWIPE_THRESHOLD = 48
-
-function getProgressWidth(year, lookAheadActive) {
-  if (lookAheadActive) {
-    return 100
-  }
-
-  const yearIndex = TIMELINE_YEARS.indexOf(year)
-  return (yearIndex / (TIMELINE_YEARS.length - 1)) * 100
-}
 
 function useTimelineScrollCarousel({ year, onYearChange, enabled }) {
   const yearRef = useRef(year)
@@ -103,43 +95,29 @@ export default function Timeline({
   scrollEnabled = false,
 }) {
   useTimelineScrollCarousel({ year, onYearChange, enabled: scrollEnabled })
+
   return (
     <section className="timeline" aria-label="Year timeline">
       <BuildingsCount year={year} />
 
-      <div className="timeline-track">
-        <div className="timeline-line" aria-hidden="true">
-          <div
-            className="timeline-progress"
-            style={{ width: `${getProgressWidth(year, lookAheadActive)}%` }}
-          />
+      <div className="timeline-nav">
+        <TimelineYearStrip
+          year={year}
+          lookAheadActive={lookAheadActive}
+          onYearChange={onYearChange}
+        />
+
+        <div className="timeline-look-ahead">
+          <button
+            type="button"
+            className={`chrome-cta timeline-cta${lookAheadActive ? ' is-active' : ''}`}
+            onClick={onLookAhead}
+            aria-pressed={lookAheadActive}
+          >
+            <span className="chrome-cta-label">Look Ahead</span>
+            <ChromeCtaArrow direction="right" />
+          </button>
         </div>
-        <ul className="timeline-years">
-          {TIMELINE_YEARS.map((timelineYear) => (
-            <li key={timelineYear} className="timeline-item">
-              <button
-                type="button"
-                className={`timeline-year${timelineYear === year && !lookAheadActive ? ' is-active' : ''}`}
-                onClick={() => onYearChange(timelineYear)}
-                aria-pressed={timelineYear === year && !lookAheadActive}
-              >
-                <span className="timeline-marker" aria-hidden="true" />
-                <span className="timeline-label">{timelineYear}</span>
-              </button>
-            </li>
-          ))}
-          <li className="timeline-item timeline-item--cta">
-            <button
-              type="button"
-              className={`chrome-cta timeline-cta${lookAheadActive ? ' is-active' : ''}`}
-              onClick={onLookAhead}
-              aria-pressed={lookAheadActive}
-            >
-              <span className="chrome-cta-label">Look Ahead</span>
-              <ChromeCtaArrow direction="right" />
-            </button>
-          </li>
-        </ul>
       </div>
     </section>
   )

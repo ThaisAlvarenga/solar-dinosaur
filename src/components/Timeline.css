@@ -6,17 +6,18 @@
   padding: 20px 32px 24px;
   box-sizing: border-box;
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 28px;
 }
 
-.timeline-track {
-  position: relative;
-  width: 100%;
-  max-width: 100%;
+/* Years + Look Ahead — move together vertically via .timeline-nav */
+.timeline-nav {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
+  display: flex;
+  align-items: flex-start;
   --timeline-line-center: 6px;
-  --timeline-year-columns: 6;
-  --timeline-total-columns: 7;
   --timeline-accent: #fff;
   --timeline-accent-bg: rgba(255, 255, 255, 0.12);
   --timeline-track: rgba(255, 255, 255, 0.22);
@@ -25,13 +26,24 @@
   --timeline-spark-glow: rgba(255, 213, 74, 0.55);
 }
 
+.timeline-years-group {
+  position: relative;
+  flex: 6 1 0;
+  min-width: 0;
+}
+
+.timeline-look-ahead {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  align-self: stretch;
+}
+
 .timeline-line {
   position: absolute;
   top: calc(var(--timeline-line-center) - 1px);
-  left: calc(100% / var(--timeline-total-columns) / 2);
-  width: calc(
-    100% * (var(--timeline-year-columns) - 1) / var(--timeline-total-columns)
-  );
+  left: calc(100% / 12);
+  width: calc(100% * 5 / 6);
   height: 2px;
   background: var(--timeline-track);
   border-radius: 1px;
@@ -66,10 +78,6 @@
   flex: 1 1 0;
   display: flex;
   justify-content: center;
-}
-
-.timeline-item--cta {
-  position: relative;
 }
 
 .timeline-year {
@@ -156,6 +164,10 @@
     padding: 16px 20px 20px;
   }
 
+  .timeline-nav {
+    --timeline-line-center: 5px;
+  }
+
   .timeline-year {
     font-size: 12px;
     gap: 8px;
@@ -168,9 +180,5 @@
 
   .timeline-line {
     top: calc(var(--timeline-line-center) - 1px);
-  }
-
-  .timeline-track {
-    --timeline-line-center: 5px;
   }
 }
