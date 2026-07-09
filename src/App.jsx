@@ -168,7 +168,7 @@ function App() {
       )}
 
       <footer className="site-footer">
-        <p>&copy; {new Date().getFullYear()} Fulton County Solar Data. Built with React and Vite.</p>
+        <p>&copy; 2026 Fulton County Solar Data</p>
       </footer>
     </>
   )
