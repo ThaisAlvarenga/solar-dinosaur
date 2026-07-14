@@ -9,6 +9,15 @@ import { Building, updateBuildingThemeMatcap } from '../components/building/inde
 const BUILDING_SCALE = 0.18
 /** Rotate map so county spread runs bottom-left → top-right on screen */
 const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
+const MAX_DRAG_DISTANCE = 1.0
+
+// Lightweight building-to-building physics. Buildings are treated as unit
+// mass, so these are accelerations rather than raw forces — tune to taste.
+const HOME_SPRING_STRENGTH = 14 // pulls a non-dragged building back toward its original map slot
+const COLLISION_STRENGTH = 90 // repulsion strength applied per unit of overlap between two buildings
+const VELOCITY_DAMPING_PER_SECOND = 6 // higher = settles faster / feels less bouncy
+const MAX_PHYSICS_SPEED = 6 // clamp so heavily overlapping buildings don't launch on first contact
+const COLLISION_RADIUS = 0.6 // world-unit footprint radius at building scale = 1; tune to match Building's visual size
 
 const getCo2Metric = (building) => building.annualCo2Lbs ?? building.annualKwh ?? 0
 
@@ -55,12 +64,14 @@ export function createCo2Scene(initialYear) {
   const buildingObjects = []
   let domElement = null
   let labelEl = null
-  let hoveredId = null
   let selectedId = null
   let pendingYearPayload = null
   let activeBuildingIds = new Set()
+  let dragState = null
+  let suppressNextClick = false
+  let lastPhysicsTime = null
 
-  const getFocusedBuildingId = () => selectedId ?? hoveredId
+  const getFocusedBuildingId = () => selectedId
 
   const hideBuildingLabel = () => {
     if (!labelEl) return
@@ -110,17 +121,6 @@ export function createCo2Scene(initialYear) {
     updateBuildingLabel()
   }
 
-  const setHoveredBuilding = (id) => {
-    if (id === hoveredId) return
-    hoveredId = id
-
-    refreshBuildingLabel()
-
-    if (domElement) {
-      domElement.style.cursor = id || selectedId ? 'pointer' : ''
-    }
-  }
-
   const applyCameraSetup = async () => {
     if (state.mapBounds) {
       fitTopDownCamera(camera, state.mapBounds)
@@ -143,7 +143,6 @@ export function createCo2Scene(initialYear) {
     const stats = statsById.get(focusedId)
     if (!isBuildingActive(stats)) {
       if (selectedId === focusedId) selectedId = null
-      if (hoveredId === focusedId) hoveredId = null
       hideBuildingLabel()
       return
     }
@@ -215,6 +214,15 @@ export function createCo2Scene(initialYear) {
           name: position.name,
           building,
           pickTarget,
+          // Physics state: homeX/homeZ is the fixed map slot a building
+          // springs back toward; physX/physZ + velX/velZ are the simulated
+          // position/velocity used for collisions and the spring-back.
+          homeX: position.x,
+          homeZ: position.z,
+          physX: position.x,
+          physZ: position.z,
+          velX: 0,
+          velZ: 0,
         })
         buildingObjects.push(building.group, pickTarget)
       })
@@ -240,6 +248,14 @@ export function createCo2Scene(initialYear) {
   const pointer = new THREE.Vector2()
   const raycaster = new THREE.Raycaster()
 
+  // Ground plane (y = 0, matching building position.y = 0) used to translate
+  // screen-space pointer movement into world-space movement regardless of
+  // camera framing. This is then converted into mapGroup's local space so
+  // dragging is correct even though mapGroup is rotated ~-135° and mirrored
+  // on X (scale.x = -1).
+  const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+  const dragPlaneHit = new THREE.Vector3()
+
   const getPickables = () => {
     const meshes = []
     buildingEntries.forEach((entry) => {
@@ -249,49 +265,238 @@ export function createCo2Scene(initialYear) {
     return meshes
   }
 
-  const pickBuildingAt = (event) => {
-    if (!domElement) return null
+  const setPointerFromEvent = (event) => {
+    if (!domElement) return false
 
     const rect = domElement.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) return null
+    if (rect.width === 0 || rect.height === 0) return false
 
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    return true
+  }
+
+  const pickBuildingAt = (event) => {
+    if (!setPointerFromEvent(event)) return null
 
     raycaster.setFromCamera(pointer, camera)
     const hits = raycaster.intersectObjects(getPickables(), false)
     return hits[0]?.object?.userData?.co2BuildingId ?? null
   }
 
+  /**
+   * Casts the current pointer position onto the y=0 ground plane and returns
+   * the hit point converted into mapGroup's local space. Using local space
+   * (rather than raw screen deltas) keeps dragging aligned with the cursor
+   * regardless of mapGroup's rotation/mirroring.
+   */
+  const getLocalPointOnGround = (event) => {
+    if (!setPointerFromEvent(event)) return null
+
+    raycaster.setFromCamera(pointer, camera)
+    const hit = raycaster.ray.intersectPlane(dragPlane, dragPlaneHit)
+    if (!hit) return null
+
+    // Ensure mapGroup's world matrix reflects any rotation applied this
+    // frame (e.g. from commitYear) before converting into its local space.
+    mapGroup.updateMatrixWorld()
+    return mapGroup.worldToLocal(dragPlaneHit.clone())
+  }
+
+  const clampDragDelta = (dx, dz) => {
+    const distance = Math.hypot(dx, dz)
+
+    if (distance <= MAX_DRAG_DISTANCE) {
+      return new THREE.Vector3(dx, 0, dz)
+    }
+
+    const ratio = MAX_DRAG_DISTANCE / distance
+    return new THREE.Vector3(dx * ratio, 0, dz * ratio)
+  }
+
+  // Approximate collision footprint for a building, scaled with however big
+  // it's currently rendered (buildings resize based on the CO2 metric).
+  // Adjust COLLISION_RADIUS if this doesn't match the buildings' visual size.
+  const getCollisionRadius = (entry) => {
+    const scale = entry.building.group.scale.x || 1
+    return COLLISION_RADIUS * Math.abs(scale)
+  }
+
+  /**
+   * Advances the building layout by dt seconds:
+   *  - the actively-dragged building (if any) is kinematic: its physics
+   *    position is just synced from wherever the pointer handlers put it,
+   *    and it pushes everything else without being pushed back.
+   *  - every other visible building is pulled toward its home slot by a
+   *    spring, and repelled away from any building it overlaps.
+   * Results are written back onto the building meshes at the end.
+   */
+  const stepBuildingPhysics = (dt) => {
+    if (dt <= 0) return
+
+    const entries = Array.from(buildingEntries.values()).filter((entry) =>
+      entry.building.shouldRender(),
+    )
+
+    const draggedId = dragState?.buildingId ?? null
+
+    // Sync the dragged building's physics position from its actual (pointer
+    // driven) mesh position, and apply the home spring to everything else.
+    entries.forEach((entry) => {
+      if (entry.id === draggedId) {
+        entry.physX = entry.building.group.position.x
+        entry.physZ = entry.building.group.position.z
+        entry.velX = 0
+        entry.velZ = 0
+        return
+      }
+
+      entry.velX += (entry.homeX - entry.physX) * HOME_SPRING_STRENGTH * dt
+      entry.velZ += (entry.homeZ - entry.physZ) * HOME_SPRING_STRENGTH * dt
+    })
+
+    // Pairwise repulsion: any two overlapping circles push apart along the
+    // line between their centers, proportional to how much they overlap.
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        const a = entries[i]
+        const b = entries[j]
+
+        const dx = a.physX - b.physX
+        const dz = a.physZ - b.physZ
+        const dist = Math.hypot(dx, dz)
+        const minDist = getCollisionRadius(a) + getCollisionRadius(b)
+
+        if (dist === 0 || dist >= minDist) continue
+
+        const overlap = minDist - dist
+        const nx = dx / dist
+        const nz = dz / dist
+        const push = overlap * COLLISION_STRENGTH * dt
+
+        if (a.id !== draggedId) {
+          a.velX += nx * push
+          a.velZ += nz * push
+        }
+        if (b.id !== draggedId) {
+          b.velX -= nx * push
+          b.velZ -= nz * push
+        }
+      }
+    }
+
+    // Integrate velocity into position, damping over time so the layout
+    // settles instead of oscillating forever.
+    const dampFactor = Math.exp(-VELOCITY_DAMPING_PER_SECOND * dt)
+
+    entries.forEach((entry) => {
+      if (entry.id === draggedId) return
+
+      entry.velX *= dampFactor
+      entry.velZ *= dampFactor
+
+      const speed = Math.hypot(entry.velX, entry.velZ)
+      if (speed > MAX_PHYSICS_SPEED) {
+        const clampRatio = MAX_PHYSICS_SPEED / speed
+        entry.velX *= clampRatio
+        entry.velZ *= clampRatio
+      }
+
+      entry.physX += entry.velX * dt
+      entry.physZ += entry.velZ * dt
+
+      entry.building.targetX = entry.physX
+      entry.building.targetZ = entry.physZ
+      entry.building.setPosition(entry.physX, entry.building.group.position.y, entry.physZ)
+    })
+  }
+
+  const onPointerDown = (event) => {
+    const hitId = pickBuildingAt(event)
+    if (!hitId || !domElement) return
+
+    const entry = buildingEntries.get(hitId)
+    if (!entry) return
+
+    // Select immediately on press so the info UI shows right away — the
+    // same press then continues below to seed drag state, so one mousedown
+    // both opens the label and lets the user drag without a second click.
+    selectedId = selectedId === hitId ? null : hitId
+    refreshBuildingLabel()
+
+    const startLocalPoint = getLocalPointOnGround(event)
+    if (!startLocalPoint) return
+
+    dragState = {
+      buildingId: hitId,
+      pointerId: event.pointerId,
+      startLocalPoint,
+      originPosition: entry.building.group.position.clone(),
+      moved: false,
+    }
+    suppressNextClick = false
+    event.preventDefault()
+    domElement.setPointerCapture?.(event.pointerId)
+  }
+
   const onPointerMove = (event) => {
-    setHoveredBuilding(pickBuildingAt(event))
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+
+    const currentLocalPoint = getLocalPointOnGround(event)
+    if (!currentLocalPoint) return
+
+    const dx = currentLocalPoint.x - dragState.startLocalPoint.x
+    const dz = currentLocalPoint.z - dragState.startLocalPoint.z
+    const dragDelta = clampDragDelta(dx, dz)
+    const movedDistance = Math.hypot(dragDelta.x, dragDelta.z)
+
+    if (movedDistance > 0.03) {
+      dragState.moved = true
+    }
+
+    const entry = buildingEntries.get(dragState.buildingId)
+    if (!entry) return
+
+    const nextX = dragState.originPosition.x + dragDelta.x
+    const nextZ = dragState.originPosition.z + dragDelta.z
+    entry.building.targetX = nextX
+    entry.building.targetZ = nextZ
+    entry.building.setPosition(nextX, entry.building.group.position.y, nextZ)
+  }
+
+  const onPointerUp = (event) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+
+    if (dragState.moved) {
+      suppressNextClick = true
+    }
+
+    if (domElement) {
+      domElement.releasePointerCapture?.(event.pointerId)
+    }
+
+    dragState = null
   }
 
   const onPointerLeave = () => {
-    hoveredId = null
-    refreshBuildingLabel()
-    if (domElement) {
-      domElement.style.cursor = selectedId ? 'pointer' : ''
-    }
+    if (!dragState) return
   }
 
   const onPointerClick = (event) => {
-    const hitId = pickBuildingAt(event)
-    if (hitId) {
-      selectedId = selectedId === hitId ? null : hitId
-      refreshBuildingLabel()
-      if (domElement) {
-        domElement.style.cursor = 'pointer'
-      }
+    if (suppressNextClick) {
+      suppressNextClick = false
       return
     }
+
+    // Selection/label toggling for building hits is handled in onPointerDown
+    // now, so the click handler only needs to clear selection when the
+    // pointer comes up over empty space.
+    const hitId = pickBuildingAt(event)
+    if (hitId) return
 
     if (!selectedId) return
     selectedId = null
     refreshBuildingLabel()
-    if (domElement) {
-      domElement.style.cursor = hoveredId ? 'pointer' : ''
-    }
   }
 
   const setupInteraction = (element) => {
@@ -304,30 +509,46 @@ export function createCo2Scene(initialYear) {
       panel.appendChild(labelEl)
     }
 
+    element.addEventListener('pointerdown', onPointerDown)
     element.addEventListener('pointermove', onPointerMove)
+    element.addEventListener('pointerup', onPointerUp)
     element.addEventListener('pointerleave', onPointerLeave)
     element.addEventListener('click', onPointerClick)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
   }
 
   const disposeInteraction = () => {
     if (domElement) {
+      domElement.removeEventListener('pointerdown', onPointerDown)
       domElement.removeEventListener('pointermove', onPointerMove)
+      domElement.removeEventListener('pointerup', onPointerUp)
       domElement.removeEventListener('pointerleave', onPointerLeave)
       domElement.removeEventListener('click', onPointerClick)
       domElement.style.cursor = ''
       domElement = null
     }
 
+    window.removeEventListener('pointerup', onPointerUp)
+    window.removeEventListener('pointercancel', onPointerUp)
+
     labelEl?.remove()
     labelEl = null
-    hoveredId = null
     selectedId = null
+    dragState = null
+    suppressNextClick = false
   }
 
   const animate = () => {
     const speed = 1 + yearProgress(state.year) * 0.5
     const animationTime = getGlobalElapsedTime() * speed
     const transitionTime = getGlobalElapsedTime()
+
+    const now = getGlobalElapsedTime()
+    const dt = lastPhysicsTime === null ? 0 : Math.min(now - lastPhysicsTime, 0.05)
+    lastPhysicsTime = now
+
+    stepBuildingPhysics(dt)
 
     let visibleCount = 0
 
