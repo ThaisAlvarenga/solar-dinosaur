@@ -1,7 +1,7 @@
 .timeline {
   flex-shrink: 0;
   width: 100%;
-  border-top: 1px solid var(--border);
+  border-top: none;
   background: transparent;
   /* Top padding is the bleed zone — scenes show through until the buildings count text */
   padding: 20px 32px 24px;
@@ -52,9 +52,8 @@
   margin: 0;
   padding: 0;
   display: grid;
-  /* Leading single dot, then year markers with equal flexible gaps */
+  /* Year markers with equal flexible gaps between them */
   grid-template-columns:
-    var(--timeline-marker-slot)
     var(--timeline-marker-slot)
     1fr
     var(--timeline-marker-slot)
@@ -203,10 +202,6 @@
     rgba(255, 241, 118, 0.95) 100%
   );
   box-shadow: 0 0 10px rgba(255, 213, 74, 0.45);
-}
-
-.timeline-leading-dot {
-  justify-content: center;
 }
 
 .timeline-dot {

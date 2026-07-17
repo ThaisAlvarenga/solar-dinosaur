@@ -36,10 +36,6 @@ export default function TimelineYearStrip({
   return (
     <div className="timeline-years-group">
       <ul className="timeline-years">
-        <li className="timeline-gap-dots timeline-leading-dot" aria-hidden="true">
-          <span className="timeline-dot" />
-        </li>
-
         {TIMELINE_YEARS.map((timelineYear, index) => {
           const isActive = timelineYear === year && !lookAheadActive
           const trailStrengthSample = getTrailDotStrength(index, 1, trail)
