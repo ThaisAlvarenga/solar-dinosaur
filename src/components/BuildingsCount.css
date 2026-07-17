@@ -21,6 +21,11 @@
   font-style: normal;
   font-weight: 400;
   line-height: normal;
+  /* Sized for the largest 2-digit counts (e.g. 42); stays fixed for 1-digit years */
+  width: 2ch;
+  min-width: 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .buildings-count__icon {

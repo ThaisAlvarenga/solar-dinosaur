@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TIMELINE_YEARS } from '../constants/timeline'
 import ChromeCtaArrow from './ChromeCtaArrow'
 import BuildingsCount from './BuildingsCount'
@@ -8,6 +8,7 @@ import './Timeline.css'
 const WHEEL_THRESHOLD = 90
 const WHEEL_COOLDOWN_MS = 420
 const SWIPE_THRESHOLD = 48
+const COMET_TRAIL_MS = 275
 
 function useTimelineScrollCarousel({ year, onYearChange, enabled }) {
   const yearRef = useRef(year)
@@ -94,7 +95,38 @@ export default function Timeline({
   onLookAhead,
   scrollEnabled = false,
 }) {
-  useTimelineScrollCarousel({ year, onYearChange, enabled: scrollEnabled })
+  const previousYearRef = useRef(year)
+  const [cometTrail, setCometTrail] = useState(null)
+
+  useTimelineScrollCarousel({
+    year,
+    onYearChange,
+    enabled: scrollEnabled && !lookAheadActive,
+  })
+
+  useEffect(() => {
+    if (lookAheadActive) {
+      previousYearRef.current = year
+      setCometTrail(null)
+      return
+    }
+
+    const fromYear = previousYearRef.current
+    const fromIndex = TIMELINE_YEARS.indexOf(fromYear)
+    const toIndex = TIMELINE_YEARS.indexOf(year)
+    previousYearRef.current = year
+
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
+
+    const trailId = `${fromIndex}-${toIndex}-${Date.now()}`
+    setCometTrail({ fromIndex, toIndex, id: trailId })
+
+    const timeoutId = window.setTimeout(() => {
+      setCometTrail((current) => (current?.id === trailId ? null : current))
+    }, COMET_TRAIL_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [year, lookAheadActive])
 
   return (
     <section className="timeline" aria-label="Year timeline">
@@ -104,6 +136,7 @@ export default function Timeline({
         <TimelineYearStrip
           year={year}
           lookAheadActive={lookAheadActive}
+          cometTrail={cometTrail}
           onYearChange={onYearChange}
         />
 

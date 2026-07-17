@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { yearProgress } from '../constants/timeline'
 import { loadSceneCsv, mapSceneYearData } from '../data'
 import { sceneFactories } from '../scenes'
+import { formatCo2Lbs, formatDollars, formatEnergyKwh } from '../utils/formatMetrics'
 
 /**
  * Mounts a Three.js scene and wires the timeline + CSV data pipeline.
@@ -27,6 +28,29 @@ function disposeObject(object) {
   })
 }
 
+function sumBuildingMetric(buildings, key) {
+  return (buildings ?? []).reduce((sum, building) => sum + (Number(building?.[key]) || 0), 0)
+}
+
+function formatYearTotal(variant, data) {
+  if (variant === 'energy') {
+    const total = data.totalAnnualKwh ?? sumBuildingMetric(data.buildings, 'annualKwh')
+    return formatEnergyKwh(total)
+  }
+
+  if (variant === 'co2') {
+    const total = data.totalAnnualCo2Lbs ?? sumBuildingMetric(data.buildings, 'annualCo2Lbs')
+    return formatCo2Lbs(total)
+  }
+
+  if (variant === 'saving') {
+    const total = data.totalAnnualSavings ?? sumBuildingMetric(data.buildings, 'annualSavings')
+    return formatDollars(total)
+  }
+
+  return null
+}
+
 export default function ThreePanel({ variant, label, year, particleTheme, onBuildingSelect }) {
   const containerRef = useRef(null)
   const applyYearRef = useRef(null)
@@ -34,6 +58,7 @@ export default function ThreePanel({ variant, label, year, particleTheme, onBuil
   const setBuildingSelectHandlerRef = useRef(null)
   const onBuildingSelectRef = useRef(onBuildingSelect)
   onBuildingSelectRef.current = onBuildingSelect
+  const [yearTotalLabel, setYearTotalLabel] = useState(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -121,6 +146,7 @@ export default function ThreePanel({ variant, label, year, particleTheme, onBuil
 
       if (cancelled) return
       applyYearRef.current?.({ year, data, progress })
+      setYearTotalLabel(formatYearTotal(variant, data))
     }
 
     updateFromYear()
@@ -136,6 +162,19 @@ export default function ThreePanel({ variant, label, year, particleTheme, onBuil
   }, [variant, particleTheme])
 
   return (
-    <div className="three-panel" ref={containerRef} role="img" aria-label={label} />
+    <div className={`three-panel three-panel--${variant}`} ref={containerRef} role="img" aria-label={label}>
+      {yearTotalLabel && variant !== 'future' && (
+        <div className={`scene-year-total scene-year-total--${variant}`} aria-live="polite">
+          <span className="scene-year-total__label">
+            {variant === 'energy'
+              ? 'ENERGY GENERATED'
+              : variant === 'co2'
+                ? 'C02 EMISSION REDUCED'
+                : 'TAX PAYER MONEY SAVED'}
+          </span>
+          <span className="scene-year-total__value">{yearTotalLabel}</span>
+        </div>
+      )}
+    </div>
   )
 }

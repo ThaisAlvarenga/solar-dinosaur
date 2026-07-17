@@ -274,6 +274,85 @@
   height: 100% !important;
 }
 
+.scene-year-total {
+  position: absolute;
+  top: calc(50px + clamp(12px, 1.6vh, 20px));
+  left: clamp(12px, 1.4vw, 20px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  max-width: calc(100% - 2rem);
+  pointer-events: none;
+}
+
+.scene-year-total__label {
+  margin: 0;
+  color: #fff;
+  font-family: Anybody, var(--heading), sans-serif;
+  font-size: 13.071px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: normal;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.scene-year-total__value {
+  margin: 0;
+  font-family: Anybody, var(--heading), sans-serif;
+  font-size: clamp(20px, 2.6vw, 34px);
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.scene-year-total--energy .scene-year-total__value {
+  background-image: linear-gradient(180deg, #ff5b00 0%, #ffd382 100%);
+}
+
+.scene-year-total--co2 .scene-year-total__value {
+  background-image: linear-gradient(180deg, #1a7bff 0%, #9ec9ff 100%);
+}
+
+.scene-year-total--saving .scene-year-total__value {
+  background-image: linear-gradient(180deg, #12a312 0%, #b6f5a0 100%);
+}
+
+.scene-year-total--energy,
+.scene-year-total--co2,
+.scene-year-total--saving {
+  border: none;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 0;
+}
+
+@media (max-width: 1200px) {
+  .scene-year-total__label {
+    font-size: clamp(10px, 1.1vw, 13.071px);
+  }
+
+  .scene-year-total__value {
+    font-size: clamp(16px, 2.3vw, 28px);
+  }
+}
+
+@media (max-width: 1024px) {
+  .scene-year-total__label {
+    white-space: normal;
+  }
+}
+
 .co2-building-label,
 .energy-building-label,
 .saving-building-label {
