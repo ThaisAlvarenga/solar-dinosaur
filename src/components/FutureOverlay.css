@@ -3,6 +3,8 @@
   --future-pad-y: clamp(12px, 3vh, 48px);
   --future-bottom-clearance: clamp(72px, 12vh, 100px);
   --future-sidebar-width: min(300px, 32vw);
+  /* Match overlaid site header so sidebar/content stay clear of the menu */
+  --future-header-clearance: var(--site-header-height, 52px);
 
   position: absolute;
   inset: 0;
@@ -78,7 +80,7 @@
 
 .future-sidebar {
   position: absolute;
-  top: var(--future-pad-y);
+  top: calc(var(--future-header-clearance) + var(--future-pad-y));
   right: var(--future-pad-x);
   bottom: var(--future-bottom-clearance);
   width: var(--future-sidebar-width);

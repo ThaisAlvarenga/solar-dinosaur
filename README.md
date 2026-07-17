@@ -13,6 +13,7 @@ A React + Vite website with three side-by-side Three.js scenes (energy, CO2, and
 | Change Look Ahead / Back / menu button style | **`src/index.css`** (`.chrome-cta`) |
 | Change page background or global colors | **`src/index.css`** |
 | Change Three.js scene visuals | **`src/scenes/{energy,co2,saving,future}Scene.js`** |
+| Adjust triptych camera framing (dev tool) | **`?triptychCamera=1`** or **Shift+C** — see [Triptych camera framing](#triptych-camera-framing-dev-tool) |
 | Replace / add CSV data per year | **`public/data/{energy,co2,saving}.csv`** |
 | Map CSV columns → scene values | **`src/data/mapYearData.js`** |
 
@@ -684,6 +685,7 @@ Each scene has its own file under **`src/scenes/`**:
 | **`savingScene.js`** | `"saving"` | Triptych (right) |
 | **`futureScene.js`** | `"future"` | Full-width (Look Ahead) |
 | **`shared.js`** | — | Shared renderer, camera, lights |
+| **`co2Camera.js`** | — | Shared triptych camera load/save + framing edit tool |
 | **`index.js`** | — | `sceneFactories` registry |
 
 They are registered in **`src/scenes/index.js`**:
@@ -757,6 +759,37 @@ Any new mesh or group should be listed in the `objects` array so **`ThreePanel`*
 6. Update styles in **`App.css`** if layout changes
 
 For a scene without timeline/CSV, follow **`futureScene.js`** (no `year` argument, no-op `applyYear`).
+
+### Triptych camera framing (dev tool)
+
+All four map scenes share one camera pose from **`public/data/co2-camera.json`** (via **`src/scenes/co2Camera.js`**). Collaborators can nudge that framing in the browser without editing code.
+
+**Edit mode is off by default** so visitors don’t accidentally pan the map. Turn it on with either:
+
+| Method | How |
+|--------|-----|
+| Keyboard | **Shift+C** (toggles on/off; preference is remembered in `localStorage`) |
+| URL | Open the app with **`?triptychCamera=1`** (e.g. `http://localhost:5173/?triptychCamera=1`). Use **`?triptychCamera=0`** to force it off |
+
+When edit mode is on, a small HUD appears on the **energy** (left) panel and these keys work:
+
+| Key | Action |
+|-----|--------|
+| **Arrow keys** | Pan on X / Z (hold **Shift** for a larger step) |
+| **Q / E** | Raise / lower on Y |
+| **+ / −** | Zoom in / out |
+| **S** | Save the current pose (writes `localStorage` and logs JSON in the console) |
+| **R** | Reset to auto top-down fit |
+| **Shift+C** | Turn edit mode off |
+
+**To persist a new framing in the repo:**
+
+1. Enable edit mode and adjust until it looks right  
+2. Press **S**  
+3. Copy the JSON from the browser console  
+4. Paste it into **`public/data/co2-camera.json`** and commit  
+
+Until you update that file, a local **S** save still wins on refresh (so you can iterate). Clear site data for the app, or overwrite the JSON and remove the `solar-dinosaur.co2-camera` `localStorage` entry, if you need to fall back to the committed file only.
 
 ### Three.js reference
 

@@ -7,7 +7,14 @@ import {
   mapEnergyYearData,
   mapSavingYearData,
 } from '../data'
-import { applyCo2Camera, loadCo2Camera } from './co2Camera'
+import {
+  applyCo2Camera,
+  getLiveTriptychCamera,
+  loadCo2Camera,
+  publishTriptychCamera,
+  serializeCo2Camera,
+  subscribeTriptychCamera,
+} from './co2Camera'
 import { getGlobalElapsedTime } from './sceneAnimation'
 import {
   addLights,
@@ -21,18 +28,17 @@ import {
 import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
 import { createBuildingParticles, PARTICLE_METRIC } from './createBuildingParticles.js'
 import { formatCo2Lbs, formatDollars, formatEnergyKwh } from '../utils/formatMetrics'
+import {
+  MAX_DRAG_DISTANCE,
+  COLLISION_RADIUS,
+  applyDragReleaseLaunch,
+  stepMapBuildingPhysics,
+} from './buildingPhysics.js'
 
 const LOOK_AHEAD_YEAR = 2026
 const BUILDING_SCALE = 0.18
 const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
-const MAX_DRAG_DISTANCE = 1.0
 const RING_GREY = 0x9a9a9a
-
-const HOME_SPRING_STRENGTH = 14
-const COLLISION_STRENGTH = 90
-const VELOCITY_DAMPING_PER_SECOND = 6
-const MAX_PHYSICS_SPEED = 6
-const COLLISION_RADIUS = 0.6
 
 /**
  * Future / Look Ahead scene — same building map as the main 2026 view,
@@ -69,6 +75,12 @@ export function createFutureScene() {
   let dragState = null
   let suppressNextClick = false
   let lastPhysicsTime = null
+  const lookTarget = new THREE.Vector3(0, 0, 0)
+
+  const unsubscribeCamera = subscribeTriptychCamera((next) => {
+    applyCo2Camera(camera, next)
+    lookTarget.fromArray(next.target)
+  })
 
   const getFocusedBuildingId = () => selectedId
 
@@ -104,13 +116,27 @@ export function createFutureScene() {
   }
 
   const applyCameraSetup = async () => {
+    const live = getLiveTriptychCamera()
+    if (live) {
+      applyCo2Camera(camera, live)
+      lookTarget.fromArray(live.target)
+      return
+    }
+
     if (state.mapBounds) {
       fitTopDownCamera(camera, state.mapBounds)
+      lookTarget.set(0, 0, 0)
     }
+
     const saved = await loadCo2Camera()
     if (saved) {
       applyCo2Camera(camera, saved)
+      lookTarget.fromArray(saved.target)
+      publishTriptychCamera(saved)
+      return
     }
+
+    publishTriptychCamera(serializeCo2Camera(camera, lookTarget))
   }
 
   const syncParticlesForEntry = (entry) => {
@@ -322,67 +348,15 @@ export function createFutureScene() {
   }
 
   const stepBuildingPhysics = (dt) => {
-    if (dt <= 0) return
-
     const entries = Array.from(buildingEntries.values()).filter((entry) =>
       entry.building.shouldRender(),
     )
-    const draggedId = dragState?.buildingId ?? null
 
-    entries.forEach((entry) => {
-      if (entry.id === draggedId) {
-        entry.physX = entry.building.group.position.x
-        entry.physZ = entry.building.group.position.z
-        entry.velX = 0
-        entry.velZ = 0
-        return
-      }
-      entry.velX += (entry.homeX - entry.physX) * HOME_SPRING_STRENGTH * dt
-      entry.velZ += (entry.homeZ - entry.physZ) * HOME_SPRING_STRENGTH * dt
-    })
-
-    for (let i = 0; i < entries.length; i++) {
-      for (let j = i + 1; j < entries.length; j++) {
-        const a = entries[i]
-        const b = entries[j]
-        const dx = a.physX - b.physX
-        const dz = a.physZ - b.physZ
-        const dist = Math.hypot(dx, dz)
-        const minDist = getCollisionRadius(a) + getCollisionRadius(b)
-        if (dist === 0 || dist >= minDist) continue
-
-        const overlap = minDist - dist
-        const nx = dx / dist
-        const nz = dz / dist
-        const push = overlap * COLLISION_STRENGTH * dt
-
-        if (a.id !== draggedId) {
-          a.velX += nx * push
-          a.velZ += nz * push
-        }
-        if (b.id !== draggedId) {
-          b.velX -= nx * push
-          b.velZ -= nz * push
-        }
-      }
-    }
-
-    const dampFactor = Math.exp(-VELOCITY_DAMPING_PER_SECOND * dt)
-    entries.forEach((entry) => {
-      if (entry.id === draggedId) return
-      entry.velX *= dampFactor
-      entry.velZ *= dampFactor
-      const speed = Math.hypot(entry.velX, entry.velZ)
-      if (speed > MAX_PHYSICS_SPEED) {
-        const clampRatio = MAX_PHYSICS_SPEED / speed
-        entry.velX *= clampRatio
-        entry.velZ *= clampRatio
-      }
-      entry.physX += entry.velX * dt
-      entry.physZ += entry.velZ * dt
-      entry.building.targetX = entry.physX
-      entry.building.targetZ = entry.physZ
-      entry.building.setPosition(entry.physX, entry.building.group.position.y, entry.physZ)
+    stepMapBuildingPhysics({
+      entries,
+      draggedId: dragState?.buildingId ?? null,
+      dt,
+      getCollisionRadius,
     })
   }
 
@@ -431,7 +405,10 @@ export function createFutureScene() {
 
   const onPointerUp = (event) => {
     if (!dragState || event.pointerId !== dragState.pointerId) return
-    if (dragState.moved) suppressNextClick = true
+    if (dragState.moved) {
+      suppressNextClick = true
+      applyDragReleaseLaunch(buildingEntries.get(dragState.buildingId))
+    }
     domElement?.releasePointerCapture?.(event.pointerId)
     dragState = null
   }
@@ -461,6 +438,8 @@ export function createFutureScene() {
   }
 
   const disposeInteraction = () => {
+    unsubscribeCamera()
+
     if (domElement) {
       domElement.removeEventListener('pointerdown', onPointerDown)
       domElement.removeEventListener('pointermove', onPointerMove)

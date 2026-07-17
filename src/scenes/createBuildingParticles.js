@@ -12,7 +12,7 @@ export function createBuildingParticles({
 } = {}) {
   const positions = new Float32Array(maxParticles * 3)
   for (let i = 0; i < maxParticles; i++) {
-    const r = 2.2 + Math.random() * 1.0
+    const r = (2.2 + Math.random() * 1.0) * 0.8
     const theta = Math.random() * Math.PI * 2
     const phi = Math.acos(2 * Math.random() - 1)
     positions[i * 3] = r * Math.sin(phi) * Math.cos(theta)

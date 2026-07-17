@@ -19,8 +19,23 @@ const ENTRANCE_DURATION = 1.25
 const ENTRANCE_FLOAT_HEIGHT = 0.14
 const ENTRANCE_STAGGER = 0.07
 
+/** Slowest / fastest ring cycle lengths (seconds) from low → high metric. */
+const PULSE_DURATION_SLOW = 5.4
+const PULSE_DURATION_FAST = 1.7
+
 /** One animated matcap canvas per theme — shared by all buildings in that theme. */
 const themeMatcapState = new Map()
+
+/** Stable 0…1 hash from an id string (same building → same phase every year). */
+function hashUnit(seed) {
+  const text = String(seed ?? '')
+  let hash = 2166136261
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0) / 4294967296
+}
 
 function hexToRgba(hex, alpha)
 {
@@ -180,6 +195,8 @@ export class Building
         this.animateRings = animateRings
         this.ringDuration = ringDuration
         this.ringStagger = ringStagger
+        /** Seconds offset into the pulse cycle — set via setPulseFromMetric. */
+        this.pulsePhase = 0
         this.data = data
         this.displayOpacity = 1
         this.exitStartOpacity = 1
@@ -362,13 +379,47 @@ export class Building
         return this.group.visible || this.isTransitioning()
     }
 
+    /**
+     * Map a building's metric to pulse rhythm + a stable start phase.
+     * Higher values → shorter, more frequent cycles; lower → slower pulses.
+     * @param {number} value
+     * @param {number} minValue
+     * @param {number} maxValue
+     * @param {string | number} [phaseSeed] building id (keeps phase stable across years)
+     */
+    setPulseFromMetric(value, minValue, maxValue, phaseSeed = '')
+    {
+        let t = 0
+        if (Number.isFinite(value) && value > 0)
+        {
+            if (maxValue > minValue)
+            {
+                t = Math.min(1, Math.max(0, (value - minValue) / (maxValue - minValue)))
+            }
+            else
+            {
+                t = 0.5
+            }
+        }
+
+        this.ringDuration = PULSE_DURATION_SLOW - t * (PULSE_DURATION_SLOW - PULSE_DURATION_FAST)
+        this.ringStagger = this.ringDuration / 3
+        this.pulsePhase = hashUnit(phaseSeed) * this.ringDuration
+
+        if (this.rings?.[1])
+        {
+            this.rings[1].offset = this.ringStagger
+        }
+    }
+
     _updateRings(time)
     {
         const cycle = Math.max(this.ringDuration, 0.001)
 
         this.rings.forEach((ring) =>
         {
-            const localTime = (time + ring.offset) % cycle
+            let localTime = (time + this.pulsePhase + ring.offset) % cycle
+            if (localTime < 0) localTime += cycle
             const t = localTime / cycle
             const scaleT = 1 - Math.pow(1 - t, 3)
             ring.mesh.scale.setScalar(scaleT)

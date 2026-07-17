@@ -54,6 +54,7 @@ body {
 }
 
 #root {
+  position: relative;
   width: 100%;
   max-width: none;
   margin: 0 auto;
@@ -65,11 +66,19 @@ body {
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
+  /* Logo 36px + header padding — scenes bleed under the overlaid nav */
+  --site-header-height: 52px;
+  /* Footer stays in flow; timeline chrome overlays above it */
+  --site-footer-height: 45px;
+  /* How far above the footer the triptych canvas ends (clears buildings-count text) */
+  --site-timeline-scene-inset: 100px;
 
   @media (max-width: 1024px) {
     height: auto;
     min-height: 100svh;
     overflow: visible;
+    --site-header-height: 48px;
+    --site-footer-height: 41px;
   }
 }
 

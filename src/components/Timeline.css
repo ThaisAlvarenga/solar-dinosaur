@@ -2,11 +2,12 @@
   flex-shrink: 0;
   width: 100%;
   border-top: 1px solid var(--border);
-  background: var(--bg);
+  background: transparent;
+  /* Top padding is the bleed zone — scenes show through until the buildings count text */
   padding: 20px 32px 24px;
   box-sizing: border-box;
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   gap: 38px;
 }
 

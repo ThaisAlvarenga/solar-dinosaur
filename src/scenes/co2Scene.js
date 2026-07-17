@@ -2,24 +2,28 @@ import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
 import { formatCo2Lbs } from '../utils/formatMetrics'
-import { applyCo2Camera, loadCo2Camera } from './co2Camera'
+import {
+  applyCo2Camera,
+  getLiveTriptychCamera,
+  loadCo2Camera,
+  publishTriptychCamera,
+  serializeCo2Camera,
+  subscribeTriptychCamera,
+} from './co2Camera'
 import { getGlobalElapsedTime } from './sceneAnimation'
 import { addLights, createCamera, createRenderer, fitTopDownCamera, isBuildingActive, scaleBuildingByMetric, commitSceneBuildings } from './shared'
 import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
 import { createBuildingParticles, PARTICLE_METRIC } from './createBuildingParticles.js'
+import {
+  MAX_DRAG_DISTANCE,
+  COLLISION_RADIUS,
+  applyDragReleaseLaunch,
+  stepMapBuildingPhysics,
+} from './buildingPhysics.js'
 
 const BUILDING_SCALE = 0.18
 /** Rotate map so county spread runs bottom-left → top-right on screen */
 const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
-const MAX_DRAG_DISTANCE = 1.0
-
-// Lightweight building-to-building physics. Buildings are treated as unit
-// mass, so these are accelerations rather than raw forces — tune to taste.
-const HOME_SPRING_STRENGTH = 14 // pulls a non-dragged building back toward its original map slot
-const COLLISION_STRENGTH = 90 // repulsion strength applied per unit of overlap between two buildings
-const VELOCITY_DAMPING_PER_SECOND = 6 // higher = settles faster / feels less bouncy
-const MAX_PHYSICS_SPEED = 6 // clamp so heavily overlapping buildings don't launch on first contact
-const COLLISION_RADIUS = 0.6 // world-unit footprint radius at building scale = 1; tune to match Building's visual size
 
 const getCo2Metric = (building) => building.annualCo2Lbs ?? building.annualKwh ?? 0
 
@@ -59,6 +63,12 @@ export function createCo2Scene(initialYear) {
   let dragState = null
   let suppressNextClick = false
   let lastPhysicsTime = null
+  const lookTarget = new THREE.Vector3(0, 0, 0)
+
+  const unsubscribeCamera = subscribeTriptychCamera((next) => {
+    applyCo2Camera(camera, next)
+    lookTarget.fromArray(next.target)
+  })
 
   const getFocusedBuildingId = () => selectedId
 
@@ -111,14 +121,27 @@ export function createCo2Scene(initialYear) {
   }
 
   const applyCameraSetup = async () => {
+    const live = getLiveTriptychCamera()
+    if (live) {
+      applyCo2Camera(camera, live)
+      lookTarget.fromArray(live.target)
+      return
+    }
+
     if (state.mapBounds) {
       fitTopDownCamera(camera, state.mapBounds)
+      lookTarget.set(0, 0, 0)
     }
 
     const saved = await loadCo2Camera()
     if (saved) {
       applyCo2Camera(camera, saved)
+      lookTarget.fromArray(saved.target)
+      publishTriptychCamera(saved)
+      return
     }
+
+    publishTriptychCamera(serializeCo2Camera(camera, lookTarget))
   }
 
   const syncFocusAfterYear = (statsById) => {
@@ -330,91 +353,20 @@ export function createCo2Scene(initialYear) {
   }
 
   /**
-   * Advances the building layout by dt seconds:
-   *  - the actively-dragged building (if any) is kinematic: its physics
-   *    position is just synced from wherever the pointer handlers put it,
-   *    and it pushes everything else without being pushed back.
-   *  - every other visible building is pulled toward its home slot by a
-   *    spring, and repelled away from any building it overlaps.
-   * Results are written back onto the building meshes at the end.
+   * Advances the building layout by dt seconds.
+   * Dragged building is kinematic; on release it launches with momentum
+   * proportional to pull distance, then collides and springs home.
    */
   const stepBuildingPhysics = (dt) => {
-    if (dt <= 0) return
-
     const entries = Array.from(buildingEntries.values()).filter((entry) =>
       entry.building.shouldRender(),
     )
 
-    const draggedId = dragState?.buildingId ?? null
-
-    // Sync the dragged building's physics position from its actual (pointer
-    // driven) mesh position, and apply the home spring to everything else.
-    entries.forEach((entry) => {
-      if (entry.id === draggedId) {
-        entry.physX = entry.building.group.position.x
-        entry.physZ = entry.building.group.position.z
-        entry.velX = 0
-        entry.velZ = 0
-        return
-      }
-
-      entry.velX += (entry.homeX - entry.physX) * HOME_SPRING_STRENGTH * dt
-      entry.velZ += (entry.homeZ - entry.physZ) * HOME_SPRING_STRENGTH * dt
-    })
-
-    // Pairwise repulsion: any two overlapping circles push apart along the
-    // line between their centers, proportional to how much they overlap.
-    for (let i = 0; i < entries.length; i++) {
-      for (let j = i + 1; j < entries.length; j++) {
-        const a = entries[i]
-        const b = entries[j]
-
-        const dx = a.physX - b.physX
-        const dz = a.physZ - b.physZ
-        const dist = Math.hypot(dx, dz)
-        const minDist = getCollisionRadius(a) + getCollisionRadius(b)
-
-        if (dist === 0 || dist >= minDist) continue
-
-        const overlap = minDist - dist
-        const nx = dx / dist
-        const nz = dz / dist
-        const push = overlap * COLLISION_STRENGTH * dt
-
-        if (a.id !== draggedId) {
-          a.velX += nx * push
-          a.velZ += nz * push
-        }
-        if (b.id !== draggedId) {
-          b.velX -= nx * push
-          b.velZ -= nz * push
-        }
-      }
-    }
-
-    // Integrate velocity into position, damping over time so the layout
-    // settles instead of oscillating forever.
-    const dampFactor = Math.exp(-VELOCITY_DAMPING_PER_SECOND * dt)
-
-    entries.forEach((entry) => {
-      if (entry.id === draggedId) return
-
-      entry.velX *= dampFactor
-      entry.velZ *= dampFactor
-
-      const speed = Math.hypot(entry.velX, entry.velZ)
-      if (speed > MAX_PHYSICS_SPEED) {
-        const clampRatio = MAX_PHYSICS_SPEED / speed
-        entry.velX *= clampRatio
-        entry.velZ *= clampRatio
-      }
-
-      entry.physX += entry.velX * dt
-      entry.physZ += entry.velZ * dt
-
-      entry.building.targetX = entry.physX
-      entry.building.targetZ = entry.physZ
-      entry.building.setPosition(entry.physX, entry.building.group.position.y, entry.physZ)
+    stepMapBuildingPhysics({
+      entries,
+      draggedId: dragState?.buildingId ?? null,
+      dt,
+      getCollisionRadius,
     })
   }
 
@@ -476,6 +428,7 @@ export function createCo2Scene(initialYear) {
 
     if (dragState.moved) {
       suppressNextClick = true
+      applyDragReleaseLaunch(buildingEntries.get(dragState.buildingId))
     }
 
     if (domElement) {
@@ -526,6 +479,8 @@ export function createCo2Scene(initialYear) {
   }
 
   const disposeInteraction = () => {
+    unsubscribeCamera()
+
     if (domElement) {
       domElement.removeEventListener('pointerdown', onPointerDown)
       domElement.removeEventListener('pointermove', onPointerMove)

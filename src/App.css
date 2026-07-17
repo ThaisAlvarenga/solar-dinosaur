@@ -1,10 +1,17 @@
 .site-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   padding: 8px 32px;
   text-align: left;
+  background: transparent;
+  box-sizing: border-box;
 
   @media (max-width: 1024px) {
     padding: 6px 20px;
@@ -16,6 +23,9 @@
   flex-direction: column;
   flex-grow: 1;
   min-height: 0;
+  /* Keep scene bottom just above the buildings-count text in the overlaid timeline */
+  padding-bottom: var(--site-timeline-scene-inset, 50px);
+  box-sizing: border-box;
 }
 
 .view-carousel {
@@ -28,6 +38,7 @@
 }
 
 .main-view-stage {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex-grow: 1;
@@ -65,9 +76,12 @@
 }
 
 .site-footer {
+  position: relative;
+  z-index: 41;
   border-top: 1px solid var(--border);
   padding: 12px 32px;
   flex-shrink: 0;
+  background: var(--bg);
 
   p {
     font-size: 14px;
@@ -192,9 +206,19 @@
 }
 
 .chrome-carousel {
-  position: relative;
-  flex-shrink: 0;
-  overflow: hidden;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--site-footer-height, 45px);
+  z-index: 40;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.chrome-carousel .timeline,
+.chrome-carousel .timeline button,
+.chrome-carousel .timeline-year {
+  pointer-events: auto;
 }
 
 .timeline-stage {
@@ -276,7 +300,8 @@
 
 .scene-year-total {
   position: absolute;
-  top: calc(50px + clamp(12px, 1.6vh, 20px));
+  /* Header is overlaid; keep totals at the same viewport position as before */
+  top: calc(var(--site-header-height, 52px) + 50px + clamp(12px, 1.6vh, 20px) + 25px);
   left: clamp(12px, 1.4vw, 20px);
   z-index: 2;
   display: flex;
@@ -377,7 +402,7 @@
 .co2-building-label {
   position: absolute;
   right: 0.75rem;
-  bottom: 0.75rem;
+  bottom: calc(0.75rem + 40px);
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -422,7 +447,7 @@
 .energy-building-label {
   position: absolute;
   right: 0.75rem;
-  bottom: 0.75rem;
+  bottom: calc(0.75rem + 40px);
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -467,7 +492,7 @@
 .saving-building-label {
   position: absolute;
   right: 0.75rem;
-  bottom: 0.75rem;
+  bottom: calc(0.75rem + 40px);
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -510,9 +535,13 @@
 }
 
 .ticks {
-  position: relative;
+  position: absolute;
+  top: var(--site-header-height, 52px);
+  left: 0;
+  right: 0;
   width: 100%;
-  flex-shrink: 0;
+  z-index: 3;
+  pointer-events: none;
 
   &::before,
   &::after {
@@ -530,4 +559,25 @@
     right: 0;
     border-right-color: var(--border);
   }
+}
+
+.triptych-camera-hud {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 3;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 72%);
+  color: #e8e8e8;
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  font-size: 0.62rem;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  text-align: left;
+  white-space: pre;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
 }

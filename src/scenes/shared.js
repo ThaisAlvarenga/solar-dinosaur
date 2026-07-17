@@ -137,6 +137,7 @@ export function commitSceneBuildings(
 
     nextActiveIds.add(id)
     entry.building.setScale(getScale(stats, min, max))
+    entry.building.setPulseFromMetric(getMetricValue(stats), min, max, id)
 
     if (!wasActive) {
       const transition = registerTransition(id, 'enter', animationTime, enterStagger, true)
