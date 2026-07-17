@@ -1,10 +1,12 @@
 import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
+import { formatCo2Lbs } from '../utils/formatMetrics'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
 import { getGlobalElapsedTime } from './sceneAnimation'
 import { addLights, createCamera, createRenderer, fitTopDownCamera, isBuildingActive, scaleBuildingByMetric, commitSceneBuildings } from './shared'
 import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
+import { createBuildingParticles, PARTICLE_METRIC } from './createBuildingParticles.js'
 
 const BUILDING_SCALE = 0.18
 /** Rotate map so county spread runs bottom-left → top-right on screen */
@@ -20,19 +22,6 @@ const MAX_PHYSICS_SPEED = 6 // clamp so heavily overlapping buildings don't laun
 const COLLISION_RADIUS = 0.6 // world-unit footprint radius at building scale = 1; tune to match Building's visual size
 
 const getCo2Metric = (building) => building.annualCo2Lbs ?? building.annualKwh ?? 0
-
-function formatCo2Saved(lbs) {
-  if (!lbs || lbs <= 0) {
-    return '0 lbs CO₂'
-  }
-
-  if (lbs >= 2000) {
-    const tons = lbs / 2000
-    return `${tons.toLocaleString(undefined, { maximumFractionDigits: 1 })} tons CO₂`
-  }
-
-  return `${Math.round(lbs).toLocaleString()} lbs CO₂`
-}
 
 /**
  * CO2 scene — center triptych panel.
@@ -106,7 +95,7 @@ export function createCo2Scene(initialYear) {
 
     const statEl = document.createElement('span')
     statEl.className = 'co2-building-label__stat'
-    statEl.textContent = formatCo2Saved(stats?.annualCo2Lbs ?? 0)
+    statEl.textContent = formatCo2Lbs(stats?.annualCo2Lbs ?? 0)
     labelEl.append(statEl)
 
     labelEl.hidden = false
@@ -167,6 +156,18 @@ export function createCo2Scene(initialYear) {
       },
     )
 
+    buildingEntries.forEach((entry) => {
+      if (!entry.building.shouldRender()) {
+        entry.particles.setCount(0)
+        return
+      }
+      const stats = statsById.get(entry.id)
+      entry.particles.setCountFromMetric(
+        getCo2Metric(stats ?? {}),
+        PARTICLE_METRIC.co2.perParticle,
+      )
+    })
+
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
     syncFocusAfterYear(statsById)
   }
@@ -198,6 +199,11 @@ export function createCo2Scene(initialYear) {
         building.group.visible = false
         mapGroup.add(building.group)
 
+        const particles = createBuildingParticles({
+          color: PARTICLE_METRIC.co2.color,
+        })
+        building.group.add(particles.points)
+
         for (const mesh of [building.sphere, building.ring1, building.ring2]) {
           mesh.userData.co2BuildingId = position.id
         }
@@ -213,6 +219,7 @@ export function createCo2Scene(initialYear) {
           id: position.id,
           name: position.name,
           building,
+          particles,
           pickTarget,
           // Physics state: homeX/homeZ is the fixed map slot a building
           // springs back toward; physX/physZ + velX/velZ are the simulated
@@ -537,6 +544,10 @@ export function createCo2Scene(initialYear) {
     selectedId = null
     dragState = null
     suppressNextClick = false
+
+    buildingEntries.forEach((entry) => {
+      entry.particles.dispose()
+    })
   }
 
   const animate = () => {
@@ -556,6 +567,7 @@ export function createCo2Scene(initialYear) {
       if (!entry.building.shouldRender()) return
       visibleCount++
       entry.building.update(animationTime, transitionTime)
+      entry.particles.animate(speed)
     })
 
     if (visibleCount > 0) {

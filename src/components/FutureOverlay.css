@@ -1,69 +1,46 @@
 .future-overlay {
+  --future-pad-x: clamp(12px, 2.5vw, 40px);
+  --future-pad-y: clamp(12px, 3vh, 48px);
+  --future-bottom-clearance: clamp(72px, 12vh, 100px);
+  --future-sidebar-width: min(300px, 32vw);
+
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
   color: #fff;
   font-family: var(--heading);
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  overflow: hidden;
 }
 
 .future-overlay button {
   pointer-events: auto;
   font-family: inherit;
   cursor: pointer;
-  margin-left: clamp(20px, 3vw, 40px);
 }
 
 .future-stats {
   position: absolute;
-  top: clamp(20px, 4vh, 48px);
-  left: clamp(20px, 3vw, 40px);
-  width: min(280px, 34vw);
+  inset: 0 auto 0 var(--future-pad-x);
+  width: min(280px, 28vw);
+  max-width: calc(100% - var(--future-sidebar-width) - 2 * var(--future-pad-x) - 24px);
   text-align: left;
   pointer-events: none;
-}
-
-.future-legend-title {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  color: #fff;
-}
-
-.future-legend-scale {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.future-legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffd27a 0%, #ff8f1f 55%, #d96d00 100%);
-  box-shadow: 0 0 8px rgba(255, 160, 40, 0.65);
-}
-
-.future-legend-labels {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: #8f939c;
+  z-index: 1;
 }
 
 .future-metric {
-  margin-top: clamp(48px, 12vh, 120px);
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  transform: translateY(-50%);
 }
 
 .future-metric-label {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: clamp(10px, 1.2vw, 12px);
   font-weight: 500;
   letter-spacing: 0.14em;
   color: #fff;
@@ -71,7 +48,7 @@
 
 .future-metric-value {
   margin: 0;
-  font-size: clamp(42px, 6vw, 72px);
+  font-size: clamp(28px, 5.5vw, 72px);
   font-weight: 700;
   line-height: 0.95;
   letter-spacing: -0.03em;
@@ -83,25 +60,62 @@
 
 .future-metric-sub {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: clamp(10px, 1.1vw, 12px);
   color: #8f939c;
+}
+
+/* Reuse main-scene building label look; only reposition for Look Ahead. */
+.future-building-info.energy-building-label,
+.future-building-info.co2-building-label,
+.future-building-info.saving-building-label {
+  position: absolute;
+  left: 0;
+  right: auto;
+  bottom: var(--future-bottom-clearance);
+  align-items: flex-start;
+  text-align: left;
 }
 
 .future-sidebar {
   position: absolute;
-  top: clamp(20px, 4vh, 40px);
-  right: clamp(16px, 2.5vw, 32px);
-  width: min(300px, 30vw);
+  top: var(--future-pad-y);
+  right: var(--future-pad-x);
+  bottom: var(--future-bottom-clearance);
+  width: var(--future-sidebar-width);
   display: flex;
   flex-direction: column;
-  gap: 14px;
   text-align: left;
   pointer-events: auto;
+  z-index: 2;
+  min-height: 0;
+}
+
+.future-sidebar-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.5vh, 14px);
+  min-height: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.future-sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.future-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
 }
 
 .future-sidebar-title {
   margin: 0;
-  font-size: 13px;
+  font-size: clamp(11px, 1.2vw, 13px);
   font-weight: 600;
   letter-spacing: 0.12em;
   line-height: 1.25;
@@ -110,7 +124,7 @@
 
 .future-sidebar-subtitle {
   margin: 8px 0 0;
-  font-size: 11px;
+  font-size: clamp(10px, 1.1vw, 11px);
   line-height: 1.45;
   color: #9aa0ab;
   text-align: right;
@@ -118,28 +132,35 @@
 
 .future-building-log {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: clamp(6px, 1vh, 10px);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .future-building-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: clamp(8px, 1vw, 12px);
+  padding: clamp(8px, 1.2vh, 12px) clamp(10px, 1.2vw, 14px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  background: rgba(12, 12, 14, 0.55);
-  backdrop-filter: blur(8px);
+  background: transparent;
+  backdrop-filter: none;
+  flex-shrink: 0;
 }
 
 .future-building-card-icon {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: clamp(22px, 2.4vw, 28px);
+  height: clamp(22px, 2.4vw, 28px);
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffd27a 0%, #ff8f1f 60%, #c45f00 100%);
   box-shadow: 0 0 12px rgba(255, 150, 40, 0.45);
@@ -147,20 +168,24 @@
 
 .future-building-card-title {
   margin: 0;
-  font-size: 13px;
+  font-size: clamp(11px, 1.2vw, 13px);
   font-weight: 600;
   color: #fff;
 }
 
 .future-building-card-message {
   margin: 2px 0 0;
-  font-size: 11px;
+  font-size: clamp(10px, 1.05vw, 11px);
   color: #8f939c;
 }
 
+.future-building-types {
+  flex-shrink: 0;
+}
+
 .future-building-types-label {
-  margin: 4px 0 10px;
-  font-size: 10px;
+  margin: 0 0 clamp(6px, 1vh, 10px);
+  font-size: clamp(9px, 1vw, 10px);
   letter-spacing: 0.12em;
   color: #8f939c;
 }
@@ -168,38 +193,40 @@
 .future-building-types-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: clamp(6px, 1vw, 10px);
 }
 
 .future-building-type {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: clamp(4px, 0.8vh, 8px);
   padding: 0;
   border: none;
   background: none;
   color: #d6d9df;
+  min-width: 0;
 }
 
 .future-building-type-icon {
-  width: 54px;
-  height: 54px;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: clamp(40px, 5vw, 54px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   display: grid;
   place-items: center;
   background: rgba(10, 10, 12, 0.72);
+}
 
-  svg {
-    width: 22px;
-    height: 22px;
-    fill: currentColor;
-  }
+.future-building-type-icon svg {
+  width: clamp(16px, 2vw, 22px);
+  height: clamp(16px, 2vw, 22px);
+  fill: currentColor;
 }
 
 .future-building-type-label {
-  font-size: 9px;
+  font-size: clamp(8px, 0.95vw, 9px);
   letter-spacing: 0.1em;
 }
 
@@ -209,12 +236,13 @@
   justify-content: center;
   gap: 10px;
   width: 100%;
-  padding: 12px 14px;
+  flex-shrink: 0;
+  padding: clamp(10px, 1.4vh, 12px) 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
   background: rgba(10, 10, 12, 0.72);
   color: #d6d9df;
-  font-size: 11px;
+  font-size: clamp(10px, 1.1vw, 11px);
 }
 
 .future-sticker-icon {
@@ -224,22 +252,42 @@
 
 .future-add-btn {
   width: 100%;
-  padding: 14px 18px;
+  flex-shrink: 0;
+  padding: clamp(12px, 1.6vh, 14px) 18px;
   border: none;
   border-radius: 999px;
   background: #fff;
   color: #000;
-  font-size: 14px;
+  font-size: clamp(12px, 1.3vw, 14px);
   font-weight: 600;
 }
 
-.future-bottom-nav {
+.future-chrome-bottom {
   position: absolute;
-  left: 50%;
-  bottom: clamp(18px, 3vh, 28px);
-  transform: translateX(-50%);
+  left: var(--future-pad-x);
+  right: var(--future-pad-x);
+  bottom: var(--future-pad-y);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(10px, 2vw, 20px);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.future-overlay-back {
+  pointer-events: auto;
+  grid-column: 1;
+  justify-self: start;
+  flex-shrink: 0;
+}
+
+.future-bottom-nav {
   display: flex;
-  width: min(720px, 72vw);
+  width: min(720px, 56vw);
+  max-width: 100%;
+  grid-column: 2;
+  justify-self: center;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   overflow: hidden;
@@ -253,18 +301,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 52px;
-  padding: 10px 12px;
+  gap: clamp(4px, 0.8vw, 8px);
+  min-height: clamp(44px, 7vh, 52px);
+  min-width: 0;
+  padding: clamp(8px, 1.2vh, 10px) clamp(6px, 1vw, 12px);
   border: none;
   background: transparent;
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: clamp(8px, 1vw, 10px);
+  letter-spacing: 0.08em;
   color: #6f7683;
 }
 
 .future-bottom-nav-item + .future-bottom-nav-item {
   border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.future-bottom-nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.future-bottom-nav-label--short {
+  display: none;
 }
 
 .future-bottom-nav-item--active.future-bottom-nav-item--energy {
@@ -295,8 +354,9 @@
 }
 
 .future-bottom-nav-dot {
-  width: 10px;
-  height: 10px;
+  flex-shrink: 0;
+  width: clamp(8px, 1vw, 10px);
+  height: clamp(8px, 1vw, 10px);
   border-radius: 50%;
 }
 
@@ -315,55 +375,167 @@
   box-shadow: 0 0 8px rgba(111, 191, 138, 0.45);
 }
 
-.future-overlay-back {
-  position: absolute;
-  left: clamp(20px, 3vw, 40px);
-  bottom: clamp(18px, 3vh, 28px);
-  pointer-events: auto;
+/* Short viewports — keep controls usable without clipping */
+@media (max-height: 820px) {
+  .future-overlay {
+    --future-bottom-clearance: clamp(68px, 14vh, 92px);
+  }
+
+  .future-building-log {
+    max-height: min(28vh, 220px);
+  }
 }
 
-@media (max-width: 1024px) {
-  .future-stats {
-    width: auto;
-    max-width: 220px;
-  }
-
-  .future-metric {
-    margin-top: 32px;
-  }
-
+@media (max-height: 640px) {
   .future-metric-value {
-    font-size: 36px;
+    font-size: clamp(24px, 6vh, 40px);
+  }
+
+  .future-building-log {
+    max-height: min(22vh, 140px);
+  }
+
+  .future-sidebar-subtitle {
+    display: none;
+  }
+}
+
+/* Tablet and below — stacked scrollable chrome over the map */
+@media (max-width: 1024px) {
+  .future-overlay {
+    --future-sidebar-width: min(340px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: var(--future-pad-y) var(--future-pad-x);
+    padding-bottom: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.28) 0%,
+      rgba(0, 0, 0, 0.72) 38%,
+      rgba(0, 0, 0, 0.92) 100%
+    );
+  }
+
+  .future-stats,
+  .future-sidebar,
+  .future-chrome-bottom {
+    position: static;
+    width: 100%;
+    max-width: none;
+    inset: auto;
+  }
+
+  .future-stats {
+    position: relative;
+    max-width: none;
+    min-height: clamp(140px, 28vh, 220px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  .future-metric,
+  .future-building-info.energy-building-label,
+  .future-building-info.co2-building-label,
+  .future-building-info.saving-building-label {
+    position: static;
+    transform: none;
+    bottom: auto;
   }
 
   .future-sidebar {
-    position: static;
-    width: auto;
-    margin: 16px;
-    pointer-events: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    bottom: auto;
   }
 
-  .future-overlay {
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    pointer-events: auto;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.82) 42%, #000 100%);
+  .future-sidebar-scroll {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .future-building-log {
+    max-height: min(28vh, 240px);
+  }
+
+  .future-building-types-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .future-chrome-bottom {
+    position: sticky;
+    bottom: 0;
+    left: auto;
+    right: auto;
+    margin-top: auto;
+    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.92) 28%, #000 100%);
+    z-index: 5;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .future-overlay-back,
+  .future-bottom-nav {
+    grid-column: auto;
   }
 
   .future-bottom-nav {
-    position: sticky;
-    bottom: 0;
-    width: calc(100% - 32px);
-    margin: auto 16px 16px;
-    transform: none;
-    left: auto;
+    width: 100%;
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 720px) {
+  .future-bottom-nav-label--full {
+    display: none;
+  }
+
+  .future-bottom-nav-label--short {
+    display: inline;
+  }
+
+  .future-chrome-bottom {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .future-overlay-back,
+  .future-bottom-nav {
+    grid-column: 1;
   }
 
   .future-overlay-back {
-    position: sticky;
-    bottom: 72px;
-    align-self: flex-start;
-    margin-left: 16px;
+    width: fit-content;
+  }
+
+  .future-sticker-btn {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .future-building-types-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .future-building-type-icon {
+    max-width: none;
+    height: 48px;
+    aspect-ratio: auto;
+  }
+
+  .future-bottom-nav-item {
+    flex-direction: column;
+    gap: 4px;
+    letter-spacing: 0.06em;
   }
 }

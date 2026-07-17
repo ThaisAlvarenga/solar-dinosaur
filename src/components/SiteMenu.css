@@ -1,5 +1,7 @@
 .site-menu {
   position: relative;
+  display: flex;
+  align-items: center;
   --menu-edge-inset-x: clamp(24px, 4vw, 48px);
   --menu-edge-inset-y-top: 28px;
   --orbit-icon-size: 54px;
@@ -9,9 +11,12 @@
   border: none;
   background: none;
   padding: 0;
+  margin: 0;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  line-height: 0;
   font-family: var(--heading);
   font-size: 20px;
   font-weight: 500;
@@ -37,9 +42,9 @@
 
 .site-logo-image {
   display: block;
-  height: 28px;
+  height: 36px;
   width: auto;
-  max-width: min(240px, 70vw);
+  max-width: min(280px, 75vw);
   color: currentColor;
   transition: color 0.2s ease, transform 0.2s ease;
 }

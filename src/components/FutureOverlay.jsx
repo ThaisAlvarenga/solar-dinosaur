@@ -2,9 +2,24 @@ import './FutureOverlay.css'
 import ChromeCtaArrow from './ChromeCtaArrow'
 
 const METRICS = [
-  { id: 'energy', label: 'ENERGY PRODUCED', dotClass: 'future-bottom-nav-dot--energy' },
-  { id: 'co2', label: 'C02 EMISSION REDUCED', dotClass: 'future-bottom-nav-dot--co2' },
-  { id: 'money', label: 'MONEY SAVED', dotClass: 'future-bottom-nav-dot--money' },
+  {
+    id: 'energy',
+    label: 'ENERGY PRODUCED',
+    shortLabel: 'ENERGY',
+    dotClass: 'future-bottom-nav-dot--energy',
+  },
+  {
+    id: 'co2',
+    label: 'C02 EMISSION REDUCED',
+    shortLabel: 'CO2',
+    dotClass: 'future-bottom-nav-dot--co2',
+  },
+  {
+    id: 'money',
+    label: 'MONEY SAVED',
+    shortLabel: 'MONEY',
+    dotClass: 'future-bottom-nav-dot--money',
+  },
 ]
 
 const BUILDING_LOG = [
@@ -52,98 +67,122 @@ function BuildingTypeIcon({ type }) {
   }
 }
 
-export default function FutureOverlay({ onBack, activeMetric = 'energy', onMetricChange }) {
+export default function FutureOverlay({
+  onBack,
+  activeMetric = 'energy',
+  onMetricChange,
+  selectedBuilding = null,
+}) {
+  const selectedStat =
+    activeMetric === 'co2'
+      ? selectedBuilding?.co2Label
+      : activeMetric === 'money'
+        ? selectedBuilding?.moneyLabel
+        : selectedBuilding?.energyLabel
+
+  const buildingLabelClass =
+    activeMetric === 'co2'
+      ? 'co2-building-label'
+      : activeMetric === 'money'
+        ? 'saving-building-label'
+        : 'energy-building-label'
+
   return (
     <div className="future-overlay" aria-label="Look Ahead controls">
       <aside className="future-stats">
-        <div className="future-legend">
-          <p className="future-legend-title">ENERGY GENERATION</p>
-          <div className="future-legend-scale" aria-hidden="true">
-            {Array.from({ length: 10 }, (_, index) => (
-              <span key={index} className="future-legend-dot" />
-            ))}
-          </div>
-          <div className="future-legend-labels">
-            <span>| LOW(&lt;20,000)</span>
-            <span>| HIGH(&gt;200,000)</span>
-          </div>
-        </div>
-
         <div className="future-metric">
           <p className="future-metric-label">ENERGY GENERATED</p>
-          <p className="future-metric-value">230,000 Kwh</p>
+          <p className="future-metric-value">230,000 kWh</p>
           <p className="future-metric-sub">Baseline 2026</p>
         </div>
+
+        {selectedBuilding && (
+          <div className={`future-building-info ${buildingLabelClass}`} aria-live="polite">
+            <span className={`${buildingLabelClass}__name`}>{selectedBuilding.name}</span>
+            <span className={`${buildingLabelClass}__stat`}>{selectedStat}</span>
+          </div>
+        )}
       </aside>
 
       <aside className="future-sidebar">
-        <header className="future-sidebar-header">
-          <h2 className="future-sidebar-title">IMAGINE THE FUTURE OF SOLAR</h2>
-          <p className="future-sidebar-subtitle">
-            Add buildings to see the impact of solar adoption in Fulton county
-          </p>
-        </header>
+        <div className="future-sidebar-scroll">
+          <header className="future-sidebar-header">
+            <h2 className="future-sidebar-title">IMAGINE THE FUTURE OF SOLAR</h2>
+            <p className="future-sidebar-subtitle">
+              Add buildings to see the impact of solar adoption in Fulton county
+            </p>
+          </header>
 
-        <ul className="future-building-log">
-          {BUILDING_LOG.map((entry) => (
-            <li key={entry.id} className="future-building-card">
-              <span className="future-building-card-icon" aria-hidden="true" />
-              <div className="future-building-card-text">
-                <p className="future-building-card-title">{entry.title}</p>
-                <p className="future-building-card-message">{entry.message}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        <div className="future-building-types">
-          <p className="future-building-types-label">CHOOSE BUILDING TYPE</p>
-          <div className="future-building-types-grid">
-            {BUILDING_TYPES.map((type) => (
-              <button key={type.id} type="button" className="future-building-type">
-                <span className="future-building-type-icon">
-                  <BuildingTypeIcon type={type.id} />
-                </span>
-                <span className="future-building-type-label">{type.label}</span>
-              </button>
+          <ul className="future-building-log">
+            {BUILDING_LOG.map((entry) => (
+              <li key={entry.id} className="future-building-card">
+                <span className="future-building-card-icon" aria-hidden="true" />
+                <div className="future-building-card-text">
+                  <p className="future-building-card-title">{entry.title}</p>
+                  <p className="future-building-card-message">{entry.message}</p>
+                </div>
+              </li>
             ))}
+          </ul>
+
+          <div className="future-building-types">
+            <p className="future-building-types-label">CHOOSE BUILDING TYPE</p>
+            <div className="future-building-types-grid">
+              {BUILDING_TYPES.map((type) => (
+                <button key={type.id} type="button" className="future-building-type">
+                  <span className="future-building-type-icon">
+                    <BuildingTypeIcon type={type.id} />
+                  </span>
+                  <span className="future-building-type-label">{type.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
+
+          <button type="button" className="future-sticker-btn">
+            <span className="future-sticker-icon" aria-hidden="true">
+              ☾
+            </span>
+            Add a sticker with your building
+          </button>
+
+          <button type="button" className="future-add-btn">
+            + Add Solar Building
+          </button>
         </div>
-
-        <button type="button" className="future-sticker-btn">
-          <span className="future-sticker-icon" aria-hidden="true">☾</span>
-          Add a sticker with your building
-        </button>
-
-        <button type="button" className="future-add-btn">
-          + Add Solar Building
-        </button>
       </aside>
 
-      <nav className="future-bottom-nav" aria-label="Future metrics">
-        {METRICS.map((metric) => (
-          <button
-            key={metric.id}
-            type="button"
-            className={[
-              'future-bottom-nav-item',
-              `future-bottom-nav-item--${metric.id}`,
-              activeMetric === metric.id ? 'future-bottom-nav-item--active' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={() => onMetricChange?.(metric.id)}
-          >
-            <span className={`future-bottom-nav-dot ${metric.dotClass}`} aria-hidden="true" />
-            {metric.label}
-          </button>
-        ))}
-      </nav>
+      <div className="future-chrome-bottom">
+        <button type="button" className="chrome-cta future-overlay-back" onClick={onBack}>
+          <ChromeCtaArrow direction="left" />
+          <span className="chrome-cta-label">Back</span>
+        </button>
 
-      <button type="button" className="chrome-cta future-overlay-back" onClick={onBack}>
-        <ChromeCtaArrow direction="left" />
-        <span className="chrome-cta-label">Back</span>
-      </button>
+        <nav className="future-bottom-nav" aria-label="Future metrics">
+          {METRICS.map((metric) => (
+            <button
+              key={metric.id}
+              type="button"
+              className={[
+                'future-bottom-nav-item',
+                `future-bottom-nav-item--${metric.id}`,
+                activeMetric === metric.id ? 'future-bottom-nav-item--active' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => onMetricChange?.(metric.id)}
+            >
+              <span className={`future-bottom-nav-dot ${metric.dotClass}`} aria-hidden="true" />
+              <span className="future-bottom-nav-label future-bottom-nav-label--full">
+                {metric.label}
+              </span>
+              <span className="future-bottom-nav-label future-bottom-nav-label--short">
+                {metric.shortLabel}
+              </span>
+            </button>
+          ))}
+        </nav>
+      </div>
     </div>
   )
 }

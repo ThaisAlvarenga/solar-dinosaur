@@ -1,11 +1,13 @@
 .site-header {
+  display: flex;
+  align-items: center;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  padding: 16px 32px;
+  padding: 8px 32px;
   text-align: left;
 
   @media (max-width: 1024px) {
-    padding: 14px 20px;
+    padding: 6px 20px;
   }
 }
 
@@ -189,35 +191,6 @@
   pointer-events: auto;
 }
 
-.content-back-stage {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-left: 32px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  opacity: 0;
-  transform: translateX(105%);
-  transition:
-    transform 0.7s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.55s ease 0.08s;
-  pointer-events: none;
-}
-
-.chrome-carousel--content .timeline-stage {
-  transform: translateX(-105%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.chrome-carousel--content .content-back-stage {
-  opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
-}
-
 .chrome-carousel {
   position: relative;
   flex-shrink: 0;
@@ -283,19 +256,6 @@
     transform: translateY(0);
   }
 
-  .content-back-stage {
-    padding-left: 20px;
-    transform: translateY(105%);
-  }
-
-  .chrome-carousel--content .timeline-stage {
-    transform: translateY(-105%);
-  }
-
-  .chrome-carousel--content .content-back-stage {
-    transform: translateY(0);
-  }
-
 }
 
 .three-panel {
@@ -314,6 +274,27 @@
   height: 100% !important;
 }
 
+.co2-building-label,
+.energy-building-label,
+.saving-building-label {
+  max-width: calc(100% - 1.5rem);
+  box-sizing: border-box;
+}
+
+/* Longest titles: "New Beginnings Senior Center", "SE Neighborhood Senior Center" */
+.co2-building-label__name,
+.energy-building-label__name,
+.saving-building-label__name {
+  min-width: 29ch;
+  white-space: nowrap;
+}
+
+.co2-building-label__stat,
+.energy-building-label__stat,
+.saving-building-label__stat {
+  white-space: nowrap;
+}
+
 .co2-building-label {
   position: absolute;
   right: 0.75rem;
@@ -323,7 +304,6 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.2rem;
-  max-width: calc(100% - 1.5rem);
   padding: 0.35rem 0.65rem;
   border: 1px solid rgb(0 106 255 / 45%);
   border-radius: 8px;
@@ -369,7 +349,6 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.2rem;
-  max-width: calc(100% - 1.5rem);
   padding: 0.35rem 0.65rem;
   border: 1px solid rgb(255 153 0 / 45%);
   border-radius: 8px;
@@ -415,7 +394,6 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.2rem;
-  max-width: calc(100% - 1.5rem);
   padding: 0.35rem 0.65rem;
   border: 1px solid rgb(34 197 94 / 45%);
   border-radius: 8px;

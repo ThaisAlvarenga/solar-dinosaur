@@ -3,7 +3,6 @@ import ThreePanel from './components/ThreePanel'
 import Timeline from './components/Timeline'
 import SiteMenu from './components/SiteMenu'
 import ContentPage from './components/ContentPage'
-import BackButton from './components/BackButton'
 import FutureOverlay from './components/FutureOverlay'
 import { DEFAULT_YEAR, TIMELINE_YEARS } from './constants/timeline'
 import './App.css'
@@ -17,6 +16,7 @@ function App() {
   const [showContent, setShowContent] = useState(false)
   const [contentActive, setContentActive] = useState(false)
   const [futureMetric, setFutureMetric] = useState('energy')
+  const [selectedFutureBuilding, setSelectedFutureBuilding] = useState(null)
 
   const isMainView = !contentActive
 
@@ -29,11 +29,13 @@ function App() {
   const closeContent = () => {
     setContentActive(false)
     setLookAheadActive(false)
+    setSelectedFutureBuilding(null)
     setYear(DEFAULT_YEAR)
   }
 
   const openContent = (viewId) => {
     setLookAheadActive(false)
+    setSelectedFutureBuilding(null)
     setContentView(viewId)
     setShowContent(true)
     requestAnimationFrame(() => {
@@ -53,6 +55,7 @@ function App() {
     }
 
     setLookAheadActive(false)
+    setSelectedFutureBuilding(null)
     setYear(DEFAULT_YEAR)
   }
 
@@ -61,6 +64,7 @@ function App() {
     setLookAheadActive(true)
     setShowFuture(true)
     setFutureMetric('energy')
+    setSelectedFutureBuilding(null)
     setYear(TIMELINE_YEARS[TIMELINE_YEARS.length - 1])
   }
 
@@ -120,12 +124,18 @@ function App() {
 
               {showFuture && (
                 <section className="future-stage" aria-label="Future scene">
-                  <ThreePanel variant="future" label="Future scene" particleTheme={futureMetric} />
+                  <ThreePanel
+                    variant="future"
+                    label="Future scene"
+                    particleTheme={futureMetric}
+                    onBuildingSelect={setSelectedFutureBuilding}
+                  />
                   {lookAheadActive && (
                     <FutureOverlay
                       onBack={handleGoBack}
                       activeMetric={futureMetric}
                       onMetricChange={setFutureMetric}
+                      selectedBuilding={selectedFutureBuilding}
                     />
                   )}
                 </section>
@@ -139,16 +149,14 @@ function App() {
               aria-hidden={!contentActive}
               aria-label="Content page"
             >
-              <ContentPage view={contentView} />
+              <ContentPage view={contentView} onBack={handleGoBack} />
             </section>
           )}
         </div>
       </main>
 
-      {(isMainView || showContent) && !lookAheadActive && (
-        <div
-          className={`chrome-carousel${contentActive ? ' chrome-carousel--content' : ''}`}
-        >
+      {isMainView && !lookAheadActive && (
+        <div className="chrome-carousel">
           <div className="timeline-stage">
             <Timeline
               year={year}
@@ -158,12 +166,6 @@ function App() {
               scrollEnabled={isMainView && !lookAheadActive && !menuOpen}
             />
           </div>
-
-          {showContent && (
-            <div className="content-back-stage">
-              <BackButton onClick={handleGoBack} />
-            </div>
-          )}
         </div>
       )}
 

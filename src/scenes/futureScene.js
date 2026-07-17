@@ -1,321 +1,508 @@
 import * as THREE from 'three'
-import { addLights, createCamera, createRenderer } from './shared'
+import { yearProgress } from '../constants/timeline'
+import {
+  loadBuildingPositions,
+  loadSolarDataset,
+  mapCo2YearData,
+  mapEnergyYearData,
+  mapSavingYearData,
+} from '../data'
+import { applyCo2Camera, loadCo2Camera } from './co2Camera'
+import { getGlobalElapsedTime } from './sceneAnimation'
+import {
+  addLights,
+  createCamera,
+  createRenderer,
+  fitTopDownCamera,
+  isBuildingActive,
+  scaleBuildingByMetric,
+  commitSceneBuildings,
+} from './shared'
+import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
+import { createBuildingParticles, PARTICLE_METRIC } from './createBuildingParticles.js'
+import { formatCo2Lbs, formatDollars, formatEnergyKwh } from '../utils/formatMetrics'
 
-const PARTICLES_PER_ORB = 700
-const PUSH_RADIUS = 1.1
-const PUSH_STRENGTH = 0.022
-const SPRING = 0.04
-const DAMPING = 0.84
+const LOOK_AHEAD_YEAR = 2026
+const BUILDING_SCALE = 0.18
+const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
+const MAX_DRAG_DISTANCE = 1.0
+const RING_GREY = 0x9a9a9a
 
-const PARTICLE_THEMES = {
-  energy: 0xf0c4a8,
-  co2: 0x9bafd4,
-  money: 0x7ecf96,
-}
-
-const ORBS = [
-  { position: new THREE.Vector3(-0.95, 0.35, 0.15), radius: 0.348, solar: true },
-  { position: new THREE.Vector3(0.75, -0.15, -0.25), radius: 0.432, solar: true },
-  { position: new THREE.Vector3(0.05, 0.55, 0.35), radius: 0.288, solar: false },
-  { position: new THREE.Vector3(-0.15, -0.5, 0.05), radius: 0.372, solar: true },
-]
-
-function sampleOrbShell(orb, inner = 1.05, outer = 2.2) {
-  const theta = Math.random() * Math.PI * 2
-  const phi = Math.acos(2 * Math.random() - 1)
-  const r = orb.radius * (inner + Math.random() * (outer - inner))
-
-  return new THREE.Vector3(
-    orb.position.x + r * Math.sin(phi) * Math.cos(theta),
-    orb.position.y + r * Math.sin(phi) * Math.sin(theta),
-    orb.position.z + r * Math.cos(phi),
-  )
-}
-
-function createOrbGlow(radius, color, opacity) {
-  return new THREE.Mesh(
-    new THREE.SphereGeometry(radius, 32, 32),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity,
-      depthWrite: false,
-    }),
-  )
-}
-
-function createOrbRing(radius, color, opacity) {
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(radius * 0.96, radius * 1.12, 64),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
-  )
-  ring.renderOrder = 2
-  return ring
-}
+const HOME_SPRING_STRENGTH = 14
+const COLLISION_STRENGTH = 90
+const VELOCITY_DAMPING_PER_SECOND = 6
+const MAX_PHYSICS_SPEED = 6
+const COLLISION_RADIUS = 0.6
 
 /**
- * Future scene — full-width Look Ahead view.
- * Wired in App.jsx as: <ThreePanel variant="future" /> (no timeline year / CSV).
+ * Future / Look Ahead scene — same building map as the main 2026 view,
+ * with grey (neutral) buildings and tab-colored particle clouds.
  */
 export function createFutureScene() {
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x000000)
-
   const camera = createCamera()
-  camera.position.set(0, 0.05, 5.2)
-  camera.lookAt(0.05, 0, 0)
-
   const renderer = createRenderer()
-  renderer.setClearColor(0x000000, 1)
+  const state = {
+    year: LOOK_AHEAD_YEAR,
+    data: { buildings: [] },
+    metricsById: new Map(),
+    particleTheme: 'energy',
+    ready: false,
+    mapBounds: null,
+  }
 
-  addLights(scene, 0xffe8cc)
-  const rim = new THREE.DirectionalLight(0xffaa55, 0.65)
-  rim.position.set(-2, 1.5, 4)
+  addLights(scene, 0xfff4e0)
+  const rim = new THREE.DirectionalLight(0xb0b0b0, 0.35)
+  rim.position.set(-2, 4, 3)
   scene.add(rim)
 
-  const visualization = new THREE.Group()
-  scene.add(visualization)
+  const mapGroup = new THREE.Group()
+  mapGroup.scale.x = -1
+  mapGroup.visible = false
+  scene.add(mapGroup)
 
-  const orbs = []
-  const orbMeshes = []
-  const glowMeshes = []
-  const ringMeshes = []
+  const buildingEntries = new Map()
+  const buildingObjects = []
+  let domElement = null
+  let selectedId = null
+  let buildingSelectHandler = null
+  let dragState = null
+  let suppressNextClick = false
+  let lastPhysicsTime = null
 
-  ORBS.forEach((config, index) => {
-    const material = new THREE.MeshStandardMaterial({
-      color: config.solar ? 0xffa040 : 0xb8bcc6,
-      emissive: config.solar ? 0xff8800 : 0x1a1c22,
-      emissiveIntensity: config.solar ? 1.05 : 0.12,
-      metalness: config.solar ? 0.3 : 0.85,
-      roughness: config.solar ? 0.22 : 0.18,
-    })
+  const getFocusedBuildingId = () => selectedId
 
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(config.radius, 48, 48), material)
-    mesh.position.copy(config.position)
-    visualization.add(mesh)
+  const getSelectedBuildingPayload = () => {
+    const focusedId = getFocusedBuildingId()
+    if (!focusedId) return null
 
-    const glow = createOrbGlow(
-      config.radius * 1.55,
-      config.solar ? 0xffb347 : 0xc8ccd4,
-      config.solar ? 0.1 : 0.05,
-    )
-    glow.position.copy(config.position)
-    visualization.add(glow)
+    const entry = buildingEntries.get(focusedId)
+    const metrics = state.metricsById.get(focusedId) ?? {}
+    const stats = (state.data.buildings ?? []).find((building) => building.id === focusedId)
 
-    const ring = createOrbRing(
-      config.radius * 1.18,
-      config.solar ? 0xffc766 : 0xd8dce4,
-      config.solar ? 0.38 : 0.2,
-    )
-    ring.position.copy(config.position)
-    ring.rotation.x = Math.PI / 2
-    visualization.add(ring)
+    if (!isBuildingActive(stats)) return null
 
-    orbs.push({
-      mesh,
-      glow,
-      ring,
-      base: config.position.clone(),
-      radius: config.radius,
-      solar: config.solar,
-      phase: index * 1.7,
-      velocity: new THREE.Vector3(),
-    })
-    orbMeshes.push(mesh)
-    glowMeshes.push(glow)
-    ringMeshes.push(ring)
-  })
-
-  const particleCount = ORBS.length * PARTICLES_PER_ORB
-  const particlePositions = new Float32Array(particleCount * 3)
-  const particleBase = new Float32Array(particleCount * 3)
-  const particleVel = new Float32Array(particleCount * 3)
-  const particleOrbIndex = new Uint8Array(particleCount)
-
-  let particleIndex = 0
-  ORBS.forEach((orbConfig, orbIndex) => {
-    for (let i = 0; i < PARTICLES_PER_ORB; i++) {
-      const point = sampleOrbShell(orbConfig)
-      const offset = particleIndex * 3
-      particleBase[offset] = point.x
-      particleBase[offset + 1] = point.y
-      particleBase[offset + 2] = point.z
-      particlePositions[offset] = point.x
-      particlePositions[offset + 1] = point.y
-      particlePositions[offset + 2] = point.z
-      particleOrbIndex[particleIndex] = orbIndex
-      particleIndex += 1
+    return {
+      id: focusedId,
+      name: entry?.name ?? stats?.name ?? '',
+      annualKwh: metrics.annualKwh ?? stats?.annualKwh ?? 0,
+      annualCo2Lbs: metrics.annualCo2Lbs ?? 0,
+      annualSavings: metrics.annualSavings ?? 0,
+      energyLabel: formatEnergyKwh(metrics.annualKwh ?? stats?.annualKwh ?? 0),
+      co2Label: formatCo2Lbs(metrics.annualCo2Lbs ?? 0),
+      moneyLabel: formatDollars(metrics.annualSavings ?? 0),
     }
-  })
+  }
 
-  const particleGeometry = new THREE.BufferGeometry()
-  particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3))
+  const notifyBuildingSelect = () => {
+    buildingSelectHandler?.(getSelectedBuildingPayload())
+  }
 
-  const particles = new THREE.Points(
-    particleGeometry,
-    new THREE.PointsMaterial({
-      color: PARTICLE_THEMES.energy,
-      size: 0.028,
-      transparent: true,
-      opacity: 0.78,
-      sizeAttenuation: true,
-      depthWrite: false,
-    }),
-  )
-  visualization.add(particles)
+  const clearBuildingSelection = () => {
+    selectedId = null
+    notifyBuildingSelect()
+  }
 
-  const particleColor = new THREE.Color(PARTICLE_THEMES.energy)
-  const particleTargetColor = new THREE.Color(PARTICLE_THEMES.energy)
+  const applyCameraSetup = async () => {
+    if (state.mapBounds) {
+      fitTopDownCamera(camera, state.mapBounds)
+    }
+    const saved = await loadCo2Camera()
+    if (saved) {
+      applyCo2Camera(camera, saved)
+    }
+  }
+
+  const syncParticlesForEntry = (entry) => {
+    const metrics = state.metricsById.get(entry.id) ?? {}
+    const theme = PARTICLE_METRIC[state.particleTheme] ?? PARTICLE_METRIC.energy
+    entry.particles.setColor(theme.color)
+    entry.particles.setCountFromMetric(metrics[theme.field] ?? 0, theme.perParticle)
+  }
+
+  const syncAllParticles = () => {
+    buildingEntries.forEach((entry) => {
+      if (!entry.building.shouldRender()) {
+        entry.particles.setCount(0)
+        return
+      }
+      syncParticlesForEntry(entry)
+    })
+  }
+
+  const commitYear = ({ year, data = {}, progress = yearProgress(year) }) => {
+    const statsById = new Map((data.buildings ?? []).map((building) => [building.id, building]))
+    const transitionTime = getGlobalElapsedTime()
+
+    commitSceneBuildings(buildingEntries, statsById, year, {
+      animationTime: transitionTime,
+      buildingsList: data.buildings ?? [],
+      getMetricValue: (building) => building.annualKwh,
+      getScale: (stats, min, max) =>
+        scaleBuildingByMetric(stats.annualKwh, min, max, BUILDING_SCALE),
+    })
+
+    mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
+    syncAllParticles()
+
+    const focusedId = getFocusedBuildingId()
+    if (!focusedId) {
+      notifyBuildingSelect()
+      return
+    }
+    const stats = statsById.get(focusedId)
+    if (!isBuildingActive(stats)) {
+      clearBuildingSelection()
+      return
+    }
+    notifyBuildingSelect()
+  }
+
+  const applyYear = (payload) => {
+    // Look Ahead is locked to 2026 baseline; ignore timeline year changes.
+    if (!state.ready) return
+    commitYear({
+      year: LOOK_AHEAD_YEAR,
+      data: state.data,
+      progress: yearProgress(LOOK_AHEAD_YEAR),
+    })
+  }
 
   const setParticleTheme = (theme) => {
-    const hex = PARTICLE_THEMES[theme] ?? PARTICLE_THEMES.energy
-    particleTargetColor.setHex(hex)
+    if (!PARTICLE_METRIC[theme]) return
+    state.particleTheme = theme
+    syncAllParticles()
   }
 
-  const pointer = new THREE.Vector2(2, 2)
-  const pointerWorld = new THREE.Vector3()
-  const raycaster = new THREE.Raycaster()
-  const interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
-  const clock = new THREE.Clock()
-  let domElement = null
+  const setBuildingSelectHandler = (handler) => {
+    buildingSelectHandler = typeof handler === 'function' ? handler : null
+    notifyBuildingSelect()
+  }
 
-  const updatePointerWorld = () => {
-    raycaster.setFromCamera(pointer, camera)
-    const hit = raycaster.ray.intersectPlane(interactionPlane, pointerWorld)
-    if (!hit) {
-      pointerWorld.set(999, 999, 0)
+  const initBuildings = async () => {
+    try {
+      const [{ buildings, bounds }, dataset] = await Promise.all([
+        loadBuildingPositions(),
+        loadSolarDataset(),
+      ])
+      state.mapBounds = bounds
+
+      const energyData = mapEnergyYearData(dataset, LOOK_AHEAD_YEAR)
+      const co2Data = mapCo2YearData(dataset, LOOK_AHEAD_YEAR)
+      const savingData = mapSavingYearData(dataset, LOOK_AHEAD_YEAR)
+
+      const co2ById = new Map((co2Data.buildings ?? []).map((b) => [b.id, b]))
+      const savingById = new Map((savingData.buildings ?? []).map((b) => [b.id, b]))
+
+      state.data = energyData
+      state.metricsById = new Map(
+        (energyData.buildings ?? []).map((building) => {
+          const co2 = co2ById.get(building.id)
+          const saving = savingById.get(building.id)
+          return [
+            building.id,
+            {
+              annualKwh: building.annualKwh ?? 0,
+              annualCo2Lbs: co2?.annualCo2Lbs ?? 0,
+              annualSavings: saving?.annualSavings ?? 0,
+            },
+          ]
+        }),
+      )
+
+      buildings.forEach((position) => {
+        const building = new Building({
+          theme: 'neutral',
+          position: { x: position.x, y: 0, z: position.z },
+          scale: BUILDING_SCALE,
+        })
+
+        building.ring1Material.color.setHex(RING_GREY)
+        building.ring2Material.color.setHex(RING_GREY)
+        building.group.visible = false
+        mapGroup.add(building.group)
+
+        const particles = createBuildingParticles({
+          color: PARTICLE_METRIC.energy.color,
+        })
+        building.group.add(particles.points)
+
+        for (const mesh of [building.sphere, building.ring1, building.ring2]) {
+          mesh.userData.futureBuildingId = position.id
+        }
+
+        const pickTarget = new THREE.Mesh(
+          new THREE.SphereGeometry(1.15, 10, 10),
+          new THREE.MeshBasicMaterial({ visible: false, depthWrite: false }),
+        )
+        pickTarget.userData.futureBuildingId = position.id
+        building.group.add(pickTarget)
+
+        buildingEntries.set(position.id, {
+          id: position.id,
+          name: position.name,
+          building,
+          particles,
+          pickTarget,
+          homeX: position.x,
+          homeZ: position.z,
+          physX: position.x,
+          physZ: position.z,
+          velX: 0,
+          velZ: 0,
+        })
+        buildingObjects.push(building.group, pickTarget)
+      })
+
+      await applyCameraSetup()
+
+      state.ready = true
+      commitYear({
+        year: LOOK_AHEAD_YEAR,
+        data: state.data,
+        progress: yearProgress(LOOK_AHEAD_YEAR),
+      })
+      mapGroup.visible = true
+    } catch (error) {
+      console.warn('[futureScene] Failed to load Look Ahead buildings', error)
     }
   }
 
-  const applyPointerForce = (x, y, strength = 1) => {
-    const dx = x - pointerWorld.x
-    const dy = y - pointerWorld.y
-    const distSq = dx * dx + dy * dy
-    if (distSq > PUSH_RADIUS * PUSH_RADIUS) return { x: 0, y: 0 }
+  initBuildings()
 
-    const dist = Math.sqrt(distSq) || 0.001
-    const force = (1 - dist / PUSH_RADIUS) * PUSH_STRENGTH * strength
-    return { x: (dx / dist) * force, y: (dy / dist) * force }
+  const pointer = new THREE.Vector2()
+  const raycaster = new THREE.Raycaster()
+  const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+  const dragPlaneHit = new THREE.Vector3()
+
+  const getPickables = () => {
+    const meshes = []
+    buildingEntries.forEach((entry) => {
+      if (!entry.building.group.visible || !entry.pickTarget) return
+      meshes.push(entry.pickTarget)
+    })
+    return meshes
+  }
+
+  const setPointerFromEvent = (event) => {
+    if (!domElement) return false
+    const rect = domElement.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return false
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    return true
+  }
+
+  const pickBuildingAt = (event) => {
+    if (!setPointerFromEvent(event)) return null
+    raycaster.setFromCamera(pointer, camera)
+    const hits = raycaster.intersectObjects(getPickables(), false)
+    return hits[0]?.object?.userData?.futureBuildingId ?? null
+  }
+
+  const getLocalPointOnGround = (event) => {
+    if (!setPointerFromEvent(event)) return null
+    raycaster.setFromCamera(pointer, camera)
+    const hit = raycaster.ray.intersectPlane(dragPlane, dragPlaneHit)
+    if (!hit) return null
+    mapGroup.updateMatrixWorld()
+    return mapGroup.worldToLocal(dragPlaneHit.clone())
+  }
+
+  const clampDragDelta = (dx, dz) => {
+    const distance = Math.hypot(dx, dz)
+    if (distance <= MAX_DRAG_DISTANCE) return new THREE.Vector3(dx, 0, dz)
+    const ratio = MAX_DRAG_DISTANCE / distance
+    return new THREE.Vector3(dx * ratio, 0, dz * ratio)
+  }
+
+  const getCollisionRadius = (entry) => {
+    const scale = entry.building.group.scale.x || 1
+    return COLLISION_RADIUS * Math.abs(scale)
+  }
+
+  const stepBuildingPhysics = (dt) => {
+    if (dt <= 0) return
+
+    const entries = Array.from(buildingEntries.values()).filter((entry) =>
+      entry.building.shouldRender(),
+    )
+    const draggedId = dragState?.buildingId ?? null
+
+    entries.forEach((entry) => {
+      if (entry.id === draggedId) {
+        entry.physX = entry.building.group.position.x
+        entry.physZ = entry.building.group.position.z
+        entry.velX = 0
+        entry.velZ = 0
+        return
+      }
+      entry.velX += (entry.homeX - entry.physX) * HOME_SPRING_STRENGTH * dt
+      entry.velZ += (entry.homeZ - entry.physZ) * HOME_SPRING_STRENGTH * dt
+    })
+
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        const a = entries[i]
+        const b = entries[j]
+        const dx = a.physX - b.physX
+        const dz = a.physZ - b.physZ
+        const dist = Math.hypot(dx, dz)
+        const minDist = getCollisionRadius(a) + getCollisionRadius(b)
+        if (dist === 0 || dist >= minDist) continue
+
+        const overlap = minDist - dist
+        const nx = dx / dist
+        const nz = dz / dist
+        const push = overlap * COLLISION_STRENGTH * dt
+
+        if (a.id !== draggedId) {
+          a.velX += nx * push
+          a.velZ += nz * push
+        }
+        if (b.id !== draggedId) {
+          b.velX -= nx * push
+          b.velZ -= nz * push
+        }
+      }
+    }
+
+    const dampFactor = Math.exp(-VELOCITY_DAMPING_PER_SECOND * dt)
+    entries.forEach((entry) => {
+      if (entry.id === draggedId) return
+      entry.velX *= dampFactor
+      entry.velZ *= dampFactor
+      const speed = Math.hypot(entry.velX, entry.velZ)
+      if (speed > MAX_PHYSICS_SPEED) {
+        const clampRatio = MAX_PHYSICS_SPEED / speed
+        entry.velX *= clampRatio
+        entry.velZ *= clampRatio
+      }
+      entry.physX += entry.velX * dt
+      entry.physZ += entry.velZ * dt
+      entry.building.targetX = entry.physX
+      entry.building.targetZ = entry.physZ
+      entry.building.setPosition(entry.physX, entry.building.group.position.y, entry.physZ)
+    })
+  }
+
+  const onPointerDown = (event) => {
+    const hitId = pickBuildingAt(event)
+    if (!hitId || !domElement) return
+    const entry = buildingEntries.get(hitId)
+    if (!entry) return
+
+    selectedId = selectedId === hitId ? null : hitId
+    notifyBuildingSelect()
+
+    const startLocalPoint = getLocalPointOnGround(event)
+    if (!startLocalPoint) return
+
+    dragState = {
+      buildingId: hitId,
+      pointerId: event.pointerId,
+      startLocalPoint,
+      originPosition: entry.building.group.position.clone(),
+      moved: false,
+    }
+    suppressNextClick = false
+    event.preventDefault()
+    domElement.setPointerCapture?.(event.pointerId)
   }
 
   const onPointerMove = (event) => {
-    if (!domElement) return
-    const rect = domElement.getBoundingClientRect()
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+    const currentLocalPoint = getLocalPointOnGround(event)
+    if (!currentLocalPoint) return
+
+    const dx = currentLocalPoint.x - dragState.startLocalPoint.x
+    const dz = currentLocalPoint.z - dragState.startLocalPoint.z
+    const dragDelta = clampDragDelta(dx, dz)
+    if (Math.hypot(dragDelta.x, dragDelta.z) > 0.03) dragState.moved = true
+
+    const entry = buildingEntries.get(dragState.buildingId)
+    if (!entry) return
+    const nextX = dragState.originPosition.x + dragDelta.x
+    const nextZ = dragState.originPosition.z + dragDelta.z
+    entry.building.targetX = nextX
+    entry.building.targetZ = nextZ
+    entry.building.setPosition(nextX, entry.building.group.position.y, nextZ)
   }
 
-  const onPointerLeave = () => {
-    pointer.set(2, 2)
+  const onPointerUp = (event) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+    if (dragState.moved) suppressNextClick = true
+    domElement?.releasePointerCapture?.(event.pointerId)
+    dragState = null
+  }
+
+  const onPointerLeave = () => {}
+
+  const onPointerClick = (event) => {
+    if (suppressNextClick) {
+      suppressNextClick = false
+      return
+    }
+    const hitId = pickBuildingAt(event)
+    if (hitId) return
+    if (!selectedId) return
+    clearBuildingSelection()
   }
 
   const setupInteraction = (element) => {
     domElement = element
+    element.addEventListener('pointerdown', onPointerDown)
     element.addEventListener('pointermove', onPointerMove)
+    element.addEventListener('pointerup', onPointerUp)
     element.addEventListener('pointerleave', onPointerLeave)
+    element.addEventListener('click', onPointerClick)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
   }
 
   const disposeInteraction = () => {
-    if (!domElement) return
-    domElement.removeEventListener('pointermove', onPointerMove)
-    domElement.removeEventListener('pointerleave', onPointerLeave)
-    domElement = null
+    if (domElement) {
+      domElement.removeEventListener('pointerdown', onPointerDown)
+      domElement.removeEventListener('pointermove', onPointerMove)
+      domElement.removeEventListener('pointerup', onPointerUp)
+      domElement.removeEventListener('pointerleave', onPointerLeave)
+      domElement.removeEventListener('click', onPointerClick)
+      domElement.style.cursor = ''
+      domElement = null
+    }
+    window.removeEventListener('pointerup', onPointerUp)
+    window.removeEventListener('pointercancel', onPointerUp)
+    selectedId = null
+    dragState = null
+    suppressNextClick = false
+    buildingSelectHandler?.(null)
+
+    buildingEntries.forEach((entry) => {
+      entry.particles.dispose()
+    })
   }
 
-  const applyYear = () => {}
-
   const animate = () => {
-    const t = clock.getElapsedTime()
-    updatePointerWorld()
+    const speed = 1 + yearProgress(LOOK_AHEAD_YEAR) * 0.5
+    const animationTime = getGlobalElapsedTime() * speed
+    const transitionTime = getGlobalElapsedTime()
 
-    orbs.forEach((orb) => {
-      const { mesh, glow, ring, base, solar, phase, velocity } = orb
-      const floatX = Math.sin(t * 0.35 + phase) * 0.035
-      const floatY = Math.cos(t * 0.28 + phase * 1.2) * 0.03
-      const floatZ = Math.sin(t * 0.42 + phase) * 0.02
-      const target = new THREE.Vector3(
-        base.x + floatX,
-        base.y + floatY,
-        base.z + floatZ,
-      )
+    const now = getGlobalElapsedTime()
+    const dt = lastPhysicsTime === null ? 0 : Math.min(now - lastPhysicsTime, 0.05)
+    lastPhysicsTime = now
+    stepBuildingPhysics(dt)
 
-      const push = applyPointerForce(mesh.position.x, mesh.position.y, 1.6)
-      velocity.x += push.x
-      velocity.y += push.y
-      velocity.x += (target.x - mesh.position.x) * SPRING * 0.8
-      velocity.y += (target.y - mesh.position.y) * SPRING * 0.8
-      velocity.z += (target.z - mesh.position.z) * SPRING * 0.6
-      velocity.multiplyScalar(DAMPING)
-      mesh.position.add(velocity)
-
-      glow.position.copy(mesh.position)
-      ring.position.copy(mesh.position)
-      ring.rotation.z = t * 0.15 + phase
-
-      if (solar) {
-        const pulse = 0.85 + Math.sin(t * 1.6 + phase) * 0.18
-        mesh.material.emissiveIntensity = pulse
-        glow.material.opacity = 0.07 + Math.sin(t * 1.2 + phase) * 0.05
-        ring.material.opacity = 0.3 + Math.sin(t * 1.4 + phase) * 0.12
-      }
+    let visibleCount = 0
+    buildingEntries.forEach((entry) => {
+      if (!entry.building.shouldRender()) return
+      visibleCount++
+      entry.building.update(animationTime, transitionTime)
+      entry.particles.animate(speed)
     })
 
-    const positionAttr = particleGeometry.attributes.position
-
-    for (let i = 0; i < particleCount; i++) {
-      const ix = i * 3
-      const orbIndex = particleOrbIndex[i]
-      const orb = orbs[orbIndex]
-      const bx = particleBase[ix]
-      const by = particleBase[ix + 1]
-      const bz = particleBase[ix + 2]
-
-      const relX = bx - ORBS[orbIndex].position.x
-      const relY = by - ORBS[orbIndex].position.y
-      const relZ = bz - ORBS[orbIndex].position.z
-
-      const orbit = t * 0.22 + orb.phase + i * 0.01
-      const targetX =
-        orb.mesh.position.x +
-        relX * Math.cos(orbit * 0.35) -
-        relZ * Math.sin(orbit * 0.35) +
-        Math.sin(t * 0.5 + i) * 0.006
-      const targetY =
-        orb.mesh.position.y + relY + Math.cos(t * 0.44 + i * 0.02) * 0.008
-      const targetZ =
-        orb.mesh.position.z +
-        relX * Math.sin(orbit * 0.35) +
-        relZ * Math.cos(orbit * 0.35) +
-        Math.sin(t * 0.38 + i * 0.015) * 0.005
-
-      const push = applyPointerForce(positionAttr.array[ix], positionAttr.array[ix + 1], 1.2)
-      particleVel[ix] += push.x
-      particleVel[ix + 1] += push.y
-
-      particleVel[ix] += (targetX - positionAttr.array[ix]) * SPRING
-      particleVel[ix + 1] += (targetY - positionAttr.array[ix + 1]) * SPRING
-      particleVel[ix + 2] += (targetZ - positionAttr.array[ix + 2]) * SPRING * 0.7
-
-      particleVel[ix] *= DAMPING
-      particleVel[ix + 1] *= DAMPING
-      particleVel[ix + 2] *= DAMPING
-
-      positionAttr.array[ix] += particleVel[ix]
-      positionAttr.array[ix + 1] += particleVel[ix + 1]
-      positionAttr.array[ix + 2] += particleVel[ix + 2]
+    if (visibleCount > 0) {
+      updateBuildingThemeMatcap('neutral', animationTime, 1.5 * speed)
     }
-
-    positionAttr.needsUpdate = true
-    visualization.rotation.y = Math.sin(t * 0.05) * 0.03
-
-    particleColor.lerp(particleTargetColor, 0.08)
-    particles.material.color.copy(particleColor)
   }
 
   return {
@@ -325,8 +512,9 @@ export function createFutureScene() {
     animate,
     applyYear,
     setParticleTheme,
+    setBuildingSelectHandler,
     setupInteraction,
     disposeInteraction,
-    objects: [particles, ...orbMeshes, ...glowMeshes, ...ringMeshes],
+    objects: buildingObjects,
   }
 }

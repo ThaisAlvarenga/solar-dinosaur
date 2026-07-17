@@ -27,20 +27,37 @@ function disposeObject(object) {
   })
 }
 
-export default function ThreePanel({ variant, label, year, particleTheme }) {
+export default function ThreePanel({ variant, label, year, particleTheme, onBuildingSelect }) {
   const containerRef = useRef(null)
   const applyYearRef = useRef(null)
   const setParticleThemeRef = useRef(null)
+  const setBuildingSelectHandlerRef = useRef(null)
+  const onBuildingSelectRef = useRef(onBuildingSelect)
+  onBuildingSelectRef.current = onBuildingSelect
 
   useEffect(() => {
     const container = containerRef.current
     const createScene = sceneFactories[variant]
     if (!container || !createScene) return
 
-    const { scene, camera, renderer, animate, applyYear, objects, setupInteraction, disposeInteraction, setParticleTheme } =
-      variant === 'future' ? createScene() : createScene(year)
+    const {
+      scene,
+      camera,
+      renderer,
+      animate,
+      applyYear,
+      objects,
+      setupInteraction,
+      disposeInteraction,
+      setParticleTheme,
+      setBuildingSelectHandler,
+    } = variant === 'future' ? createScene() : createScene(year)
     applyYearRef.current = applyYear
     setParticleThemeRef.current = setParticleTheme ?? null
+    setBuildingSelectHandlerRef.current = setBuildingSelectHandler ?? null
+    setBuildingSelectHandlerRef.current?.((building) => {
+      onBuildingSelectRef.current?.(building)
+    })
     renderer.domElement.setAttribute('aria-label', label)
     container.appendChild(renderer.domElement)
     setupInteraction?.(renderer.domElement)
@@ -76,6 +93,7 @@ export default function ThreePanel({ variant, label, year, particleTheme }) {
       renderer.dispose()
       applyYearRef.current = null
       setParticleThemeRef.current = null
+      setBuildingSelectHandlerRef.current = null
     }
     // year intentionally omitted — scene updates via applyYear effect, not remount
     // eslint-disable-next-line react-hooks/exhaustive-deps

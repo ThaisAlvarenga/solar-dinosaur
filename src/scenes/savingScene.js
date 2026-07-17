@@ -1,10 +1,12 @@
 import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
+import { formatDollars } from '../utils/formatMetrics'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
 import { getGlobalElapsedTime } from './sceneAnimation'
 import { addLights, createCamera, createRenderer, fitTopDownCamera, isBuildingActive, scaleBuildingByMetric, commitSceneBuildings } from './shared'
 import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
+import { createBuildingParticles, PARTICLE_METRIC } from './createBuildingParticles.js'
 
 const BUILDING_SCALE = 0.18
 const MAP_BASE_ROTATION = (-3 * Math.PI) / 4
@@ -17,22 +19,6 @@ const COLLISION_STRENGTH = 90 // repulsion strength applied per unit of overlap 
 const VELOCITY_DAMPING_PER_SECOND = 6 // higher = settles faster / feels less bouncy
 const MAX_PHYSICS_SPEED = 6 // clamp so heavily overlapping buildings don't launch on first contact
 const COLLISION_RADIUS = 0.6 // world-unit footprint radius at building scale = 1; tune to match Building's visual size
-
-function formatSavings(dollars) {
-  if (!dollars || dollars <= 0) {
-    return '$0'
-  }
-
-  if (dollars >= 1_000_000) {
-    return `$${(dollars / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`
-  }
-
-  if (dollars >= 1000) {
-    return `$${(dollars / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}K`
-  }
-
-  return `$${Math.round(dollars).toLocaleString()}`
-}
 
 /**
  * Saving scene — right triptych panel.
@@ -105,7 +91,7 @@ export function createSavingScene(initialYear) {
 
     const statEl = document.createElement('span')
     statEl.className = 'saving-building-label__stat'
-    statEl.textContent = formatSavings(stats?.annualSavings ?? 0)
+    statEl.textContent = formatDollars(stats?.annualSavings ?? 0)
     labelEl.append(statEl)
 
     labelEl.hidden = false
@@ -166,6 +152,18 @@ export function createSavingScene(initialYear) {
       },
     )
 
+    buildingEntries.forEach((entry) => {
+      if (!entry.building.shouldRender()) {
+        entry.particles.setCount(0)
+        return
+      }
+      const stats = statsById.get(entry.id)
+      entry.particles.setCountFromMetric(
+        stats?.annualSavings ?? 0,
+        PARTICLE_METRIC.money.perParticle,
+      )
+    })
+
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
     syncFocusAfterYear(statsById)
   }
@@ -197,6 +195,11 @@ export function createSavingScene(initialYear) {
         building.group.visible = false
         mapGroup.add(building.group)
 
+        const particles = createBuildingParticles({
+          color: PARTICLE_METRIC.money.color,
+        })
+        building.group.add(particles.points)
+
         for (const mesh of [building.sphere, building.ring1, building.ring2]) {
           mesh.userData.savingBuildingId = position.id
         }
@@ -212,6 +215,7 @@ export function createSavingScene(initialYear) {
           id: position.id,
           name: position.name,
           building,
+          particles,
           pickTarget,
           // Physics state: homeX/homeZ is the fixed map slot a building
           // springs back toward; physX/physZ + velX/velZ are the simulated
@@ -536,6 +540,10 @@ export function createSavingScene(initialYear) {
     selectedId = null
     dragState = null
     suppressNextClick = false
+
+    buildingEntries.forEach((entry) => {
+      entry.particles.dispose()
+    })
   }
 
   const animate = () => {
@@ -555,6 +563,7 @@ export function createSavingScene(initialYear) {
       if (!entry.building.shouldRender()) return
       visibleCount++
       entry.building.update(animationTime, transitionTime)
+      entry.particles.animate(speed)
     })
 
     if (visibleCount > 0) {

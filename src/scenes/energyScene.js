@@ -1,10 +1,12 @@
 import * as THREE from 'three'
 import { yearProgress } from '../constants/timeline'
 import { loadBuildingPositions } from '../data/mapLayout'
+import { formatEnergyKwh } from '../utils/formatMetrics'
 import { applyCo2Camera, loadCo2Camera } from './co2Camera'
 import { getGlobalElapsedTime } from './sceneAnimation'
 import { addLights, createCamera, createRenderer, fitTopDownCamera, isBuildingActive, scaleBuildingByMetric, commitSceneBuildings } from './shared'
 import { Building, updateBuildingThemeMatcap } from '../components/building/index.js'
+import { createBuildingParticles, PARTICLE_METRIC } from './createBuildingParticles.js'
 
 const BUILDING_SCALE = 0.18
 /** Rotate map so county spread runs bottom-left → top-right on screen */
@@ -18,22 +20,6 @@ const COLLISION_STRENGTH = 90 // repulsion strength applied per unit of overlap 
 const VELOCITY_DAMPING_PER_SECOND = 6 // higher = settles faster / feels less bouncy
 const MAX_PHYSICS_SPEED = 6 // clamp so heavily overlapping buildings don't launch on first contact
 const COLLISION_RADIUS = 0.6 // world-unit footprint radius at building scale = 1; tune to match Building's visual size
-
-function formatEnergyKwh(kwh) {
-  if (!kwh || kwh <= 0) {
-    return '0 kWh'
-  }
-
-  if (kwh >= 1_000_000) {
-    return `${(kwh / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} GWh`
-  }
-
-  if (kwh >= 1000) {
-    return `${(kwh / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} MWh`
-  }
-
-  return `${Math.round(kwh).toLocaleString()} kWh`
-}
 
 /**
  * Energy scene — left triptych panel.
@@ -167,6 +153,18 @@ export function createEnergyScene(initialYear) {
       },
     )
 
+    buildingEntries.forEach((entry) => {
+      if (!entry.building.shouldRender()) {
+        entry.particles.setCount(0)
+        return
+      }
+      const stats = statsById.get(entry.id)
+      entry.particles.setCountFromMetric(
+        stats?.annualKwh ?? 0,
+        PARTICLE_METRIC.energy.perParticle,
+      )
+    })
+
     mapGroup.rotation.y = MAP_BASE_ROTATION + progress * 0.015 - 0.0075
     syncFocusAfterYear(statsById)
   }
@@ -198,6 +196,11 @@ export function createEnergyScene(initialYear) {
         building.group.visible = false
         mapGroup.add(building.group)
 
+        const particles = createBuildingParticles({
+          color: PARTICLE_METRIC.energy.color,
+        })
+        building.group.add(particles.points)
+
         for (const mesh of [building.sphere, building.ring1, building.ring2]) {
           mesh.userData.energyBuildingId = position.id
         }
@@ -213,6 +216,7 @@ export function createEnergyScene(initialYear) {
           id: position.id,
           name: position.name,
           building,
+          particles,
           pickTarget,
           // Physics state: homeX/homeZ is the fixed map slot a building
           // springs back toward; physX/physZ + velX/velZ are the simulated
@@ -537,6 +541,10 @@ export function createEnergyScene(initialYear) {
     selectedId = null
     dragState = null
     suppressNextClick = false
+
+    buildingEntries.forEach((entry) => {
+      entry.particles.dispose()
+    })
   }
 
   const animate = () => {
@@ -556,6 +564,7 @@ export function createEnergyScene(initialYear) {
       if (!entry.building.shouldRender()) return
       visibleCount++
       entry.building.update(animationTime, transitionTime)
+      entry.particles.animate(speed)
     })
 
     if (visibleCount > 0) {
