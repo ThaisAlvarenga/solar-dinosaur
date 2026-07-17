@@ -4356,6 +4356,15 @@
       "kWh": 2116
     }
   ],
+  "totalKwhProduced": 5404246,
+  "kwhByYear": {
+    "2021": 269997,
+    "2022": 713987,
+    "2023": 675905,
+    "2024": 703741,
+    "2025": 1794904,
+    "2026": 1245712
+  },
   "monthlyCost": [
     {
       "buildingId": "adams-park-library",
@@ -8746,14 +8755,34 @@
     2025,
     2026
   ],
+  "totalSavings": 289422,
+  "savingsByYear": {
+    "2021": 13044,
+    "2022": 39951,
+    "2023": 39638,
+    "2024": 47565,
+    "2025": 97575,
+    "2026": 51649
+  },
+  "savingsFormula": "kWh × (Elec Rate − CS Rate); 2026 uses December 2025 rates",
+  "totalCo2SavedLbs": 7524575,
+  "co2ByYear": {
+    "2021": 375929,
+    "2022": 994116,
+    "2023": 941093,
+    "2024": 979850,
+    "2025": 2499126,
+    "2026": 1734461
+  },
   "emissionRateLbPerMWh": 1392.345,
   "emissionRateSource": "Excel $AM$3 — eGRID SRSO CO₂ rate (lb/MWh)",
   "sourceFiles": {
     "energy": "solar-data.xlsx",
     "cost": "solar-cost.xlsx",
-    "emissionRate": "Solar Monthly Savings *.xlsx"
+    "emissionRate": "Solar Monthly Savings 2026-2-9.xlsx",
+    "savings": "Solar Monthly Savings 2026-2-9.xlsx"
   },
-  "importedAt": "2026-07-09T21:51:03.166Z",
+  "importedAt": "2026-07-13T23:39:07.699Z",
   "sheetNames": [
     "2021",
     "2022",

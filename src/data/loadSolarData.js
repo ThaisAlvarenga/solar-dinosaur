@@ -8,6 +8,12 @@ let solarDataCache = null
  *   years: number[],
  *   buildings: Array<{ id: string, name: string }>,
  *   monthly: Array<{ buildingId: string, year: number, month: number, kWh: number }>,
+ *   totalKwhProduced?: number,
+ *   kwhByYear?: Record<string, number>,
+ *   totalSavings?: number,
+ *   savingsByYear?: Record<string, number>,
+ *   totalCo2SavedLbs?: number,
+ *   co2ByYear?: Record<string, number>,
  *   sourceFile?: string,
  *   importedAt?: string,
  * }>}

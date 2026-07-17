@@ -5,9 +5,11 @@ import XLSX from 'xlsx'
 import {
   DEFAULT_EMISSION_RATE_LB_PER_MWH,
   readEmissionRateCell,
+  summarizeCo2Totals,
 } from '../src/data/co2Emissions.js'
 import { getBuildingDisplayName } from '../src/data/buildingRegistry.js'
 import { parseSolarCostSheet } from '../src/data/parseSolarCostWorkbook.js'
+import { calcSolarSavingsTotals } from '../src/data/parseSolarSavingsWorkbook.js'
 import { parseSolarWorkbookSheets } from '../src/data/parseSolarWorkbook.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -39,23 +41,76 @@ function mergeBuildingCatalog(energyBuildings, costBuildings) {
   return Array.from(buildingMap.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-function findEmissionRateLbPerMWh() {
-  const savingsWorkbook = readdirSync(dataDir).find((name) =>
-    /^Solar Monthly Savings.*\.xlsx$/i.test(name),
+function findSavingsWorkbookName() {
+  return readdirSync(dataDir).find(
+    (name) =>
+      /^Solar Monthly Savings.*\.xlsx$/i.test(name) && !name.startsWith('~$'),
   )
+}
 
+function sheetRows(workbook, sheetName) {
+  const sheet = workbook.Sheets[sheetName]
+  if (!sheet) return null
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+}
+
+function loadSavingsWorkbook() {
+  const savingsWorkbookName = findSavingsWorkbookName()
+  if (!savingsWorkbookName) return null
+
+  const workbook = XLSX.read(readFileSync(join(dataDir, savingsWorkbookName)), {
+    type: 'buffer',
+  })
+  return { name: savingsWorkbookName, workbook }
+}
+
+function findEmissionRateLbPerMWh(savingsWorkbook) {
   if (savingsWorkbook) {
-    const workbook = XLSX.read(readFileSync(join(dataDir, savingsWorkbook)), { type: 'buffer' })
-    const sheet = workbook.Sheets.kWh ?? workbook.Sheets[workbook.SheetNames[0]]
+    const sheet =
+      savingsWorkbook.Sheets.kWh ?? savingsWorkbook.Sheets[savingsWorkbook.SheetNames[0]]
     const rate = readEmissionRateCell(sheet)
     if (rate) {
-      console.log(`Emission rate ($AM$3) from ${savingsWorkbook}: ${rate} lb/MWh`)
+      console.log(`Emission rate ($AM$3) from savings workbook: ${rate} lb/MWh`)
       return rate
     }
   }
 
   console.log(`Emission rate ($AM$3): using default ${DEFAULT_EMISSION_RATE_LB_PER_MWH} lb/MWh`)
   return DEFAULT_EMISSION_RATE_LB_PER_MWH
+}
+
+function computeSavingsTotals(savingsPack, energyMonthly) {
+  if (!savingsPack) {
+    console.warn('[import-data] Solar Monthly Savings workbook not found — totalSavings omitted.')
+    return {
+      totalSavings: 0,
+      savingsByYear: {},
+      savingsFormula: null,
+      savingsWorkbookName: null,
+    }
+  }
+
+  const kWh = sheetRows(savingsPack.workbook, 'kWh')
+  const elecRates = sheetRows(savingsPack.workbook, 'Elec Rates')
+  const csRates = sheetRows(savingsPack.workbook, 'CS Rates')
+
+  if (!kWh || !elecRates || !csRates) {
+    console.warn('[import-data] Savings workbook missing kWh / Elec Rates / CS Rates sheets.')
+    return {
+      totalSavings: 0,
+      savingsByYear: {},
+      savingsFormula: null,
+      savingsWorkbookName: savingsPack.name,
+    }
+  }
+
+  const totals = calcSolarSavingsTotals(
+    { kWh, elecRates, csRates },
+    (serial) => XLSX.SSF.parse_date_code(serial),
+    energyMonthly,
+  )
+
+  return { ...totals, savingsWorkbookName: savingsPack.name }
 }
 
 const energyWorkbook = XLSX.read(readFileSync(energyInputPath), { type: 'buffer' })
@@ -82,17 +137,28 @@ try {
   console.warn('[import-data] Could not read solar-cost.xlsx — savings data will be empty.', error.message)
 }
 
+const savingsPack = loadSavingsWorkbook()
+const savingsTotals = computeSavingsTotals(savingsPack, energyData.monthly)
+const emissionRateLbPerMWh = findEmissionRateLbPerMWh(savingsPack?.workbook)
+const co2Totals = summarizeCo2Totals(energyData.kwhByYear, emissionRateLbPerMWh)
+
 const dataset = {
   ...energyData,
   buildings: mergeBuildingCatalog(energyData.buildings, costData.buildings),
   monthlyCost: costData.monthlyCost,
   costYears: costData.costYears,
-  emissionRateLbPerMWh: findEmissionRateLbPerMWh(),
+  totalSavings: savingsTotals.totalSavings,
+  savingsByYear: savingsTotals.savingsByYear,
+  savingsFormula: savingsTotals.savingsFormula,
+  totalCo2SavedLbs: co2Totals.totalCo2SavedLbs,
+  co2ByYear: co2Totals.co2ByYear,
+  emissionRateLbPerMWh,
   emissionRateSource: 'Excel $AM$3 — eGRID SRSO CO₂ rate (lb/MWh)',
   sourceFiles: {
     energy: 'solar-data.xlsx',
     cost: 'solar-cost.xlsx',
-    emissionRate: 'Solar Monthly Savings *.xlsx',
+    emissionRate: savingsTotals.savingsWorkbookName ?? 'Solar Monthly Savings *.xlsx',
+    savings: savingsTotals.savingsWorkbookName ?? 'Solar Monthly Savings *.xlsx',
   },
   importedAt: new Date().toISOString(),
   sheetNames: energyWorkbook.SheetNames,
@@ -103,4 +169,24 @@ writeFileSync(outputPath, `${JSON.stringify(dataset, null, 2)}\n`, 'utf8')
 console.log(`Imported ${dataset.monthly.length} energy rows across ${dataset.years.length} year(s): ${dataset.years.join(', ')}`)
 console.log(`Imported ${dataset.monthlyCost.length} cost rows across ${dataset.costYears.length} year(s): ${dataset.costYears.join(', ')}`)
 console.log(`Buildings: ${dataset.buildings.length}`)
+console.log(`Total kWh produced: ${Math.round(dataset.totalKwhProduced).toLocaleString()}`)
+console.log(
+  `kWh by year: ${Object.entries(dataset.kwhByYear)
+    .map(([year, value]) => `${year}=${Number(value).toLocaleString()}`)
+    .join(', ')}`,
+)
+console.log(`Total CO₂ saved: ${Math.round(dataset.totalCo2SavedLbs).toLocaleString()} lbs`)
+console.log(
+  `CO₂ by year: ${Object.entries(dataset.co2ByYear)
+    .map(([year, value]) => `${year}=${Number(value).toLocaleString()} lbs`)
+    .join(', ')}`,
+)
+console.log(`Total savings: $${Math.round(dataset.totalSavings).toLocaleString()}`)
+if (dataset.savingsByYear && Object.keys(dataset.savingsByYear).length) {
+  console.log(
+    `Savings by year: ${Object.entries(dataset.savingsByYear)
+      .map(([year, value]) => `${year}=$${Number(value).toLocaleString()}`)
+      .join(', ')}`,
+  )
+}
 console.log(`Wrote ${outputPath}`)

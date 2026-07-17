@@ -178,11 +178,30 @@ export function parseSolarWorkbookSheets(sheets) {
     monthly.push(...section.monthly)
   }
 
+  const kwhByYear = {}
+  for (const entry of monthly) {
+    kwhByYear[entry.year] = (kwhByYear[entry.year] ?? 0) + entry.kWh
+  }
+
+  const roundedKwhByYear = Object.fromEntries(
+    Object.entries(kwhByYear)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([year, value]) => [year, Math.round(value)]),
+  )
+
+  const totalKwhProduced = Math.round(
+    monthly.reduce((sum, entry) => sum + entry.kWh, 0),
+  )
+
   return {
     sourceFormat: 'fulton-monthly-trends',
     years: Array.from(years).sort((a, b) => a - b),
     buildings: Array.from(buildingMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
     monthly,
+    /** All-time total kWh across every building and year in the workbook. */
+    totalKwhProduced,
+    /** Rounded annual kWh totals keyed by year. */
+    kwhByYear: roundedKwhByYear,
   }
 }
 
