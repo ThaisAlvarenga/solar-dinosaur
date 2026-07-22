@@ -6,8 +6,9 @@ const CONTENT = {
   'artist-statement': {
     title: 'Artist statement / Context of the project / Overview',
     body: [
-      'This project explores the relationship between energy, carbon, and conservation through an interactive visual timeline.',
-      'Use the main site to move through years 2021–2026, then look ahead to imagine what comes next.',
+      'Fulton Brigther Futures is an interactive data visualization of representing the solar panel adoption across the Fulton county since 2021. Each solar-equipped building appears as a glowing orb sized by their footprint; together the orbs cluster into the county\'s shape. A timeline lets viewers watch adoption grow year by year, alongside energy generated, CO2 reduced, and money saved.', 
+      'The project exists online and as an interactive, digital installation at the Fulton County Government Center.his project explores the relationship between energy, carbon, and conservation through an interactive visual timeline.',
+      'Use the main site to move through years 2021\–2026, then look ahead to imagine what comes next.',
     ],
   },
   team: {
